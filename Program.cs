@@ -147,7 +147,7 @@ while (true)
 
 string ReadMultiLineInput()
 {
-    var firstLine = ConsoleHelper.ReadInput();
+    var firstLine = ConsoleHelper.ReadInputWithHistory();
     if (!firstLine.EndsWith('\\'))
         return firstLine;
 

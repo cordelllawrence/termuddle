@@ -34,7 +34,7 @@ public static class CommandHandler
                 ConsoleHelper.WriteInfo("  /help                             - Show this help message");
                 ConsoleHelper.WriteInfo("  /clear                            - Clear conversation history");
                 ConsoleHelper.WriteInfo("  /models                           - List available Ollama models");
-                ConsoleHelper.WriteInfo("  /switch <model>                   - Switch to a different model");
+                ConsoleHelper.WriteInfo("  /switch <model|number>            - Switch to a different model (name, number, or partial match)");
                 ConsoleHelper.WriteInfo("  /preferences show                 - Show current preferences");
                 ConsoleHelper.WriteInfo("  /preferences set <key>=<value>    - Update a preference");
                 ConsoleHelper.WriteInfo("    Keys: ollama.host, ollama.model");
@@ -95,26 +95,59 @@ public static class CommandHandler
     {
         if (parts.Length < 2)
         {
-            ConsoleHelper.WriteError("Usage: /switch <model>");
+            ConsoleHelper.WriteError("Usage: /switch <model|number>");
             return;
         }
 
-        var newModel = parts[1];
+        var input = parts[1];
 
         try
         {
             var service = new OllamaService($"http://{session.OllamaHost}:11434");
             var models = await service.ListModelsAsync();
 
-            if (!models.Contains(newModel))
+            string? resolved = null;
+
+            // Try as a number (index from /models listing)
+            if (int.TryParse(input, out var index) && index >= 1 && index <= models.Count)
             {
-                ConsoleHelper.WriteError($"Model '{newModel}' not found. Use /models to see available models.");
+                resolved = models[index - 1];
+            }
+            // Try exact match
+            else if (models.Contains(input))
+            {
+                resolved = input;
+            }
+            // Try fuzzy match (case-insensitive contains)
+            else
+            {
+                var matches = models
+                    .Where(m => m.Contains(input, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                if (matches.Count == 1)
+                {
+                    resolved = matches[0];
+                }
+                else if (matches.Count > 1)
+                {
+                    ConsoleHelper.WriteError($"'{input}' matches multiple models:");
+                    foreach (var m in matches)
+                        ConsoleHelper.WriteError($"  - {m}");
+                    ConsoleHelper.WriteError("Be more specific, or use the model number from /models.");
+                    return;
+                }
+            }
+
+            if (resolved is null)
+            {
+                ConsoleHelper.WriteError($"Model '{input}' not found. Use /models to see available models.");
                 return;
             }
 
-            session.ModelName = newModel;
+            session.ModelName = resolved;
             session.Reconnect();
-            ConsoleHelper.WriteSystem($"Switched to model: {newModel}");
+            ConsoleHelper.WriteSystem($"Switched to model: {resolved}");
         }
         catch (Exception ex)
         {
