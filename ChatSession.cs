@@ -7,6 +7,7 @@ public class ChatSession
 {
     public string OllamaHost { get; set; } = "localhost";
     public string ModelName { get; set; } = "";
+    public bool StreamResponses { get; set; } = true;
     public IChatClient ChatClient { get; set; } = null!;
     public List<ChatMessage> History { get; } = new();
     public Preferences Preferences { get; set; } = new();

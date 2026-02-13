@@ -73,6 +73,7 @@ var session = new ChatSession
 {
     OllamaHost = ollamaHost,
     ModelName = prefs.Model,
+    StreamResponses = prefs.StreamResponses,
     Preferences = prefs
 };
 session.Reconnect();
@@ -121,19 +122,36 @@ while (true)
 
     try
     {
-        // Thinking indicator
-        Console.ForegroundColor = ConsoleColor.DarkGray;
-        Console.Write("Thinking...");
+        if (session.StreamResponses)
+        {
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            var fullResponse = new System.Text.StringBuilder();
+            await foreach (var update in session.ChatClient.GetStreamingResponseAsync(session.History))
+            {
+                var chunk = update.Text ?? string.Empty;
+                Console.Write(chunk);
+                fullResponse.Append(chunk);
+            }
+            Console.ResetColor();
+            Console.WriteLine();
+            session.History.Add(new ChatMessage(ChatRole.Assistant, fullResponse.ToString()));
+        }
+        else
+        {
+            // Thinking indicator
+            Console.ForegroundColor = ConsoleColor.DarkGray;
+            Console.Write("Thinking...");
 
-        var response = await session.ChatClient.GetResponseAsync(session.History);
-        var responseText = response.Text ?? string.Empty;
+            var response = await session.ChatClient.GetResponseAsync(session.History);
+            var responseText = response.Text ?? string.Empty;
 
-        // Clear the "Thinking..." text
-        Console.Write("\r            \r");
-        Console.ResetColor();
+            // Clear the "Thinking..." text
+            Console.Write("\r            \r");
+            Console.ResetColor();
 
-        ConsoleHelper.WriteResponse(responseText);
-        session.History.Add(new ChatMessage(ChatRole.Assistant, responseText));
+            ConsoleHelper.WriteResponse(responseText);
+            session.History.Add(new ChatMessage(ChatRole.Assistant, responseText));
+        }
     }
     catch (Exception ex)
     {

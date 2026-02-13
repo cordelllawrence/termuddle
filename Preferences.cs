@@ -6,6 +6,7 @@ public class Preferences
 {
     public string OllamaHost { get; set; } = "localhost";
     public string Model { get; set; } = "";
+    public bool StreamResponses { get; set; } = true;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

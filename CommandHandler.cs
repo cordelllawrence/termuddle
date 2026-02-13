@@ -23,6 +23,7 @@ public static class CommandHandler
                 int received = session.History.Count(m => m.Role == ChatRole.Assistant);
                 ConsoleHelper.WriteInfo($"Host:               {session.OllamaHost}");
                 ConsoleHelper.WriteInfo($"Model:              {session.ModelName}");
+                ConsoleHelper.WriteInfo($"Streaming:          {(session.StreamResponses ? "on" : "off")}");
                 ConsoleHelper.WriteInfo($"Messages sent:      {sent}");
                 ConsoleHelper.WriteInfo($"Messages received:  {received}");
                 break;
@@ -33,11 +34,17 @@ public static class CommandHandler
                 ConsoleHelper.WriteInfo("  /info                             - Show session information");
                 ConsoleHelper.WriteInfo("  /help                             - Show this help message");
                 ConsoleHelper.WriteInfo("  /clear                            - Clear conversation history");
+                ConsoleHelper.WriteInfo("  /stream                           - Toggle streaming responses on/off");
                 ConsoleHelper.WriteInfo("  /models                           - List available Ollama models");
                 ConsoleHelper.WriteInfo("  /switch <model|number>            - Switch to a different model (name, number, or partial match)");
                 ConsoleHelper.WriteInfo("  /preferences show                 - Show current preferences");
                 ConsoleHelper.WriteInfo("  /preferences set <key>=<value>    - Update a preference");
-                ConsoleHelper.WriteInfo("    Keys: ollama.host, ollama.model");
+                ConsoleHelper.WriteInfo("    Keys: ollama.host, ollama.model, ollama.stream");
+                break;
+
+            case "/stream":
+                session.StreamResponses = !session.StreamResponses;
+                ConsoleHelper.WriteSystem($"Streaming is now {(session.StreamResponses ? "on" : "off")}.");
                 break;
 
             case "/clear":
@@ -168,8 +175,9 @@ public static class CommandHandler
         switch (subCommand)
         {
             case "show":
-                ConsoleHelper.WriteInfo($"ollama.host  = {session.Preferences.OllamaHost}");
-                ConsoleHelper.WriteInfo($"ollama.model = {session.Preferences.Model}");
+                ConsoleHelper.WriteInfo($"ollama.host   = {session.Preferences.OllamaHost}");
+                ConsoleHelper.WriteInfo($"ollama.model  = {session.Preferences.Model}");
+                ConsoleHelper.WriteInfo($"ollama.stream = {session.Preferences.StreamResponses.ToString().ToLowerInvariant()}");
                 ConsoleHelper.WriteInfo($"File: {Preferences.DefaultPath}");
                 break;
 
@@ -177,7 +185,7 @@ public static class CommandHandler
                 if (parts.Length < 3 || !parts[2].Contains('='))
                 {
                     ConsoleHelper.WriteError("Usage: /preferences set <key>=<value>");
-                    ConsoleHelper.WriteError("  Keys: ollama.host, ollama.model");
+                    ConsoleHelper.WriteError("  Keys: ollama.host, ollama.model, ollama.stream");
                     return;
                 }
 
@@ -203,9 +211,23 @@ public static class CommandHandler
                         ConsoleHelper.WriteSystem($"Default model updated to: {value} (switched)");
                         break;
 
+                    case "ollama.stream":
+                        if (bool.TryParse(value, out var streamVal))
+                        {
+                            session.Preferences.StreamResponses = streamVal;
+                            session.StreamResponses = streamVal;
+                            session.Preferences.Save();
+                            ConsoleHelper.WriteSystem($"Streaming updated to: {(streamVal ? "on" : "off")}");
+                        }
+                        else
+                        {
+                            ConsoleHelper.WriteError("Invalid value. Use true or false.");
+                        }
+                        break;
+
                     default:
                         ConsoleHelper.WriteError($"Unknown preference key: {key}");
-                        ConsoleHelper.WriteError("  Keys: ollama.host, ollama.model");
+                        ConsoleHelper.WriteError("  Keys: ollama.host, ollama.model, ollama.stream");
                         break;
                 }
                 break;
