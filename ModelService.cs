@@ -1,9 +1,9 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
 
-namespace tuichat;
+namespace termuddle;
 
-public class ModelService
+public class ModelService : IDisposable
 {
     private readonly HttpClient _http;
 
@@ -14,6 +14,8 @@ public class ModelService
         if (!string.IsNullOrEmpty(apiKey))
             _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
     }
+
+    public void Dispose() => _http.Dispose();
 
     public async Task<List<string>> ListModelsAsync()
     {

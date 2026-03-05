@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace tuichat;
+namespace termuddle;
 
 public class Preferences
 {

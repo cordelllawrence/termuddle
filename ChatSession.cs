@@ -1,18 +1,44 @@
 using Microsoft.Extensions.AI;
 using OpenAI;
 
-namespace tuichat;
+namespace termuddle;
 
 public class ChatSession
 {
-    public string BaseUrl { get; set; } = "http://localhost:11434/v1";
-    public string ApiKey { get; set; } = "";
-    public string ModelName { get; set; } = "";
-    public bool StreamResponses { get; set; } = true;
-    public bool ShowTps { get; set; } = false;
+    public Preferences Preferences { get; set; } = new();
+
+    public string BaseUrl
+    {
+        get => Preferences.BaseUrl;
+        set => Preferences.BaseUrl = value;
+    }
+
+    public string ApiKey
+    {
+        get => Preferences.ApiKey;
+        set => Preferences.ApiKey = value;
+    }
+
+    public string ModelName
+    {
+        get => Preferences.Model;
+        set => Preferences.Model = value;
+    }
+
+    public bool StreamResponses
+    {
+        get => Preferences.StreamResponses;
+        set => Preferences.StreamResponses = value;
+    }
+
+    public bool ShowTps
+    {
+        get => Preferences.ShowTps;
+        set => Preferences.ShowTps = value;
+    }
+
     public IChatClient ChatClient { get; set; } = null!;
     public List<ChatMessage> History { get; } = new();
-    public Preferences Preferences { get; set; } = new();
     public ChatOptions ChatOptions { get; } = new()
     {
         Tools = [..WebSearchTool.CreateTools(), ..WebFetchTool.CreateTools(), ..DateTimeTool.CreateTools()]

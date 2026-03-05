@@ -1,9 +1,10 @@
 using System.ComponentModel;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.AI;
 
-namespace tuichat;
+namespace termuddle;
 
 public static class WebSearchTool
 {
@@ -96,9 +97,25 @@ public static class WebSearchTool
     }
 }
 
-public static class WebFetchTool
+public static partial class WebFetchTool
 {
     private const int MaxContentLength = 20_000;
+    private static readonly TimeSpan FetchTimeout = TimeSpan.FromSeconds(30);
+
+    private static readonly Regex ScriptStyleRegex =
+        new(@"<(script|style)[^>]*>.*?</\1>", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+
+    [GeneratedRegex(@"<(br|p|div|h[1-6]|li|tr)[^>]*>", RegexOptions.IgnoreCase)]
+    private static partial Regex BlockElementRegex();
+
+    [GeneratedRegex(@"<[^>]+>")]
+    private static partial Regex HtmlTagRegex();
+
+    [GeneratedRegex(@"[ \t]+")]
+    private static partial Regex WhitespaceRegex();
+
+    [GeneratedRegex(@"\n{3,}")]
+    private static partial Regex ExcessNewlinesRegex();
 
     [Description("Fetches the content of a web page at the given URL and returns it as plain text. Useful for reading articles, documentation, or any web page.")]
     public static async Task<string> FetchAsync(
@@ -113,14 +130,15 @@ public static class WebFetchTool
 
         try
         {
+            using var cts = new CancellationTokenSource(FetchTimeout);
             using var request = new HttpRequestMessage(HttpMethod.Get, uri);
-            request.Headers.UserAgent.ParseAdd("tuichat/1.0");
+            request.Headers.UserAgent.ParseAdd("termuddle/1.0");
             request.Headers.Accept.ParseAdd("text/html, text/plain, application/json");
 
-            using var response = await WebSearchTool.SharedHttp.SendAsync(request);
+            using var response = await WebSearchTool.SharedHttp.SendAsync(request, cts.Token);
             response.EnsureSuccessStatusCode();
 
-            var content = await response.Content.ReadAsStringAsync();
+            var content = await response.Content.ReadAsStringAsync(cts.Token);
             var contentType = response.Content.Headers.ContentType?.MediaType ?? "";
 
             if (contentType.Contains("html"))
@@ -148,24 +166,12 @@ public static class WebFetchTool
 
     private static string StripHtmlTags(string html)
     {
-        // Remove script and style blocks entirely
-        html = System.Text.RegularExpressions.Regex.Replace(
-            html, @"<(script|style)[^>]*>[\s\S]*?</\1>", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-        // Replace common block elements with newlines
-        html = System.Text.RegularExpressions.Regex.Replace(
-            html, @"<(br|p|div|h[1-6]|li|tr)[^>]*>", "\n", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-        // Strip remaining tags
-        html = System.Text.RegularExpressions.Regex.Replace(html, @"<[^>]+>", "");
-
-        // Decode common HTML entities
+        html = ScriptStyleRegex.Replace(html, "");
+        html = BlockElementRegex().Replace(html, "\n");
+        html = HtmlTagRegex().Replace(html, "");
         html = System.Net.WebUtility.HtmlDecode(html);
-
-        // Collapse whitespace
-        html = System.Text.RegularExpressions.Regex.Replace(html, @"[ \t]+", " ");
-        html = System.Text.RegularExpressions.Regex.Replace(html, @"\n{3,}", "\n\n");
-
+        html = WhitespaceRegex().Replace(html, " ");
+        html = ExcessNewlinesRegex().Replace(html, "\n\n");
         return html.Trim();
     }
 }

@@ -1,4 +1,4 @@
-namespace tuichat;
+namespace termuddle;
 
 public record CliOptions(string? BaseUrl, string? ApiKey, string? Model, bool? Stream, bool? Tps);
 
@@ -49,7 +49,7 @@ public static class StartupHelper
 
     private static async Task<Preferences?> RunSetupWizardAsync()
     {
-        ConsoleHelper.WriteSystem("Welcome to tuichat! Let's set things up.");
+        ConsoleHelper.WriteSystem("Welcome to termuddle! Let's set things up.");
         Console.WriteLine();
 
         var defaultUrl = "http://localhost:11434/v1";
@@ -63,7 +63,7 @@ public static class StartupHelper
         ConsoleHelper.WriteInfo("Enter your API key (leave blank if not required, e.g. Ollama).");
         var apiKey = ConsoleHelper.ReadInputMasked("API key");
 
-        var service = new ModelService(new Uri(baseUrl).GetLeftPart(UriPartial.Authority), apiKey);
+        using var service = new ModelService(new Uri(baseUrl).GetLeftPart(UriPartial.Authority), apiKey);
 
         ConsoleHelper.WriteSystem($"Connecting to {baseUrl}...");
         List<string> models;

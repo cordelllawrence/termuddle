@@ -1,11 +1,107 @@
 using Spectre.Console;
 
-namespace tuichat;
+namespace termuddle;
 
 public static class ConsoleHelper
 {
     private static readonly List<string> _history = new();
     private static int _historyIndex;
+    private static CancellationTokenSource? _thinkingCts;
+    private static Task? _thinkingTask;
+    private static readonly List<char> _typeAheadBuffer = new();
+    private static readonly object _consoleLock = new();
+
+    private static readonly string[] _spinnerFrames =
+        ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+    public static void StartThinkingAnimation()
+    {
+        _thinkingCts = new CancellationTokenSource();
+        var ct = _thinkingCts.Token;
+
+        // Scroll a new line into the output area on the main thread
+        // so the scrolling region is handled correctly.
+        var spinnerRow = TerminalLayout.OutputAreaHeight - 1;
+        lock (_consoleLock)
+        {
+            Console.Write("\e7");
+            Console.SetCursorPosition(0, spinnerRow);
+            Console.WriteLine();
+            Console.Write("\e8");
+            Console.CursorVisible = false;
+        }
+
+        // Background task only updates the spinner row in place — no scrolling.
+        _thinkingTask = Task.Run(async () =>
+        {
+            var frameIndex = 0;
+            while (!ct.IsCancellationRequested)
+            {
+                lock (_consoleLock)
+                {
+                    var frame = _spinnerFrames[frameIndex % _spinnerFrames.Length];
+                    Console.SetCursorPosition(0, spinnerRow);
+                    Console.ForegroundColor = ConsoleColor.Cyan;
+                    Console.Write($" {frame} Thinking...");
+                    Console.ResetColor();
+                }
+                frameIndex++;
+                try
+                {
+                    await Task.Delay(80, ct);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+            }
+
+            // Clear the spinner line
+            lock (_consoleLock)
+            {
+                Console.SetCursorPosition(0, spinnerRow);
+                Console.Write(new string(' ', Console.WindowWidth));
+            }
+        }, ct);
+    }
+
+    public static async Task StopThinkingAnimationAsync()
+    {
+        if (_thinkingCts is not null)
+        {
+            _thinkingCts.Cancel();
+            if (_thinkingTask is not null)
+            {
+                await _thinkingTask;
+                _thinkingTask = null;
+            }
+            _thinkingCts.Dispose();
+            _thinkingCts = null;
+        }
+        Console.CursorVisible = true;
+    }
+
+    /// <summary>
+    /// Non-blocking: reads any pending keystrokes into the type-ahead buffer.
+    /// Does NOT move the cursor — just silently captures keys so they appear
+    /// pre-filled when the prompt returns after streaming.
+    /// </summary>
+    public static void DrainTypeAhead()
+    {
+        while (Console.KeyAvailable)
+        {
+            var key = Console.ReadKey(true);
+            if (key.Key == ConsoleKey.Backspace)
+            {
+                if (_typeAheadBuffer.Count > 0)
+                    _typeAheadBuffer.RemoveAt(_typeAheadBuffer.Count - 1);
+            }
+            else if (key.KeyChar >= ' ')
+            {
+                _typeAheadBuffer.Add(key.KeyChar);
+            }
+        }
+    }
 
     public static void WriteSystem(string message)
     {
@@ -42,7 +138,7 @@ public static class ConsoleHelper
     public static void WriteInfo(string message)
     {
         TerminalLayout.WriteToOutputArea(() =>
-            AnsiConsole.MarkupLine($"[yellow]{Markup.Escape(message)}[/]"));
+            AnsiConsole.MarkupLine($"[cyan]{Markup.Escape(message)}[/]"));
     }
 
     public static void WriteStreamChunk(string chunk)
@@ -114,6 +210,19 @@ public static class ConsoleHelper
         var cursorPos = 0;
         _historyIndex = _history.Count;
         string? savedCurrent = null;
+
+        // Seed from type-ahead buffer if anything was typed during streaming
+        if (_typeAheadBuffer.Count > 0)
+        {
+            buffer.AddRange(_typeAheadBuffer);
+            cursorPos = buffer.Count;
+            _typeAheadBuffer.Clear();
+        }
+
+        // Tab completion state
+        List<string>? tabMatches = null;
+        int tabIndex = 0;
+        string? tabOriginal = null;
 
         int width = Console.WindowWidth;
         int firstLineCap = Math.Max(1, width - promptLen);
@@ -198,6 +307,10 @@ public static class ConsoleHelper
             Redraw();
         }
 
+        // If we have seeded type-ahead content, render it
+        if (buffer.Count > 0)
+            Redraw();
+
         while (true)
         {
             TerminalLayout.HandleResize();
@@ -206,6 +319,7 @@ public static class ConsoleHelper
             switch (key.Key)
             {
                 case ConsoleKey.Enter:
+                    tabMatches = null;
                     Console.ResetColor();
                     var result = new string(buffer.ToArray());
                     if (!string.IsNullOrWhiteSpace(result))
@@ -221,6 +335,7 @@ public static class ConsoleHelper
                     return result;
 
                 case ConsoleKey.Backspace:
+                    tabMatches = null;
                     if (cursorPos > 0)
                     {
                         buffer.RemoveAt(cursorPos - 1);
@@ -230,6 +345,7 @@ public static class ConsoleHelper
                     break;
 
                 case ConsoleKey.Delete:
+                    tabMatches = null;
                     if (cursorPos < buffer.Count)
                     {
                         buffer.RemoveAt(cursorPos);
@@ -238,6 +354,7 @@ public static class ConsoleHelper
                     break;
 
                 case ConsoleKey.LeftArrow:
+                    tabMatches = null;
                     if (cursorPos > 0)
                     {
                         cursorPos--;
@@ -247,6 +364,7 @@ public static class ConsoleHelper
                     break;
 
                 case ConsoleKey.RightArrow:
+                    tabMatches = null;
                     if (cursorPos < buffer.Count)
                     {
                         cursorPos++;
@@ -256,11 +374,13 @@ public static class ConsoleHelper
                     break;
 
                 case ConsoleKey.Home:
+                    tabMatches = null;
                     cursorPos = 0;
                     Console.SetCursorPosition(promptLen, TerminalLayout.InputStartRow);
                     break;
 
                 case ConsoleKey.End:
+                    tabMatches = null;
                     cursorPos = buffer.Count;
                     var (ec, er) = CursorToPosition(cursorPos);
                     Console.SetCursorPosition(ec, er);
@@ -268,6 +388,7 @@ public static class ConsoleHelper
 
                 case ConsoleKey.UpArrow:
                 {
+                    tabMatches = null;
                     var (_, curRow) = CursorToPosition(cursorPos);
                     if (curRow > TerminalLayout.InputStartRow)
                     {
@@ -309,10 +430,69 @@ public static class ConsoleHelper
                             : _history[_historyIndex];
                         SetBufferContent(text);
                     }
+                    tabMatches = null;
+                    break;
+                }
+
+                case ConsoleKey.Tab:
+                {
+                    var current = new string(buffer.ToArray());
+                    if (!current.StartsWith('/'))
+                        break;
+
+                    if (tabMatches == null)
+                    {
+                        tabOriginal = current;
+                        var spaceIdx = current.IndexOf(' ');
+
+                        if (spaceIdx < 0)
+                        {
+                            // Complete command name
+                            tabMatches = CommandHandler.Commands
+                                .Where(c => c.StartsWith(current, StringComparison.OrdinalIgnoreCase))
+                                .ToList();
+                        }
+                        else
+                        {
+                            // Complete subcommand
+                            var cmd = current[..spaceIdx].ToLowerInvariant();
+                            var partial = current[(spaceIdx + 1)..];
+                            if (CommandHandler.Subcommands.TryGetValue(cmd, out var subs))
+                            {
+                                tabMatches = subs
+                                    .Where(s => s.StartsWith(partial, StringComparison.OrdinalIgnoreCase))
+                                    .Select(s => cmd + " " + s)
+                                    .ToList();
+                            }
+                            else
+                            {
+                                tabMatches = [];
+                            }
+                        }
+
+                        tabIndex = 0;
+                        if (tabMatches.Count == 0)
+                        {
+                            tabMatches = null;
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        tabIndex = (tabIndex + 1) % tabMatches.Count;
+                    }
+
+                    if (tabMatches.Count > 0)
+                    {
+                        SetBufferContent(tabMatches[tabIndex]);
+                        if (tabMatches.Count == 1)
+                            tabMatches = null;
+                    }
                     break;
                 }
 
                 default:
+                    tabMatches = null;
                     if (key.KeyChar >= ' ')
                     {
                         buffer.Insert(cursorPos, key.KeyChar);

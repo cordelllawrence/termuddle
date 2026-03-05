@@ -1,4 +1,4 @@
-namespace tuichat;
+namespace termuddle;
 
 public static class TerminalLayout
 {
