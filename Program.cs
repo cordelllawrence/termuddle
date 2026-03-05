@@ -52,7 +52,7 @@ CoconaApp.Run(async (
     {
         e.Cancel = true;
         TerminalLayout.ResetLayout();
-        ConsoleHelper.WriteSystem("\nGoodbye! Thanks for chatting.");
+        ConsoleHelper.WriteSystem($"\n{ConsoleHelper.GetRandomGoodbye()}");
         loggerFactory.Dispose();
         Log.CloseAndFlush();
         Environment.Exit(0);

@@ -27,7 +27,7 @@ public static class CommandHandler
         switch (command)
         {
             case "/bye":
-                ConsoleHelper.WriteSystem("Goodbye! Thanks for chatting.");
+                ConsoleHelper.WriteSystem(ConsoleHelper.GetRandomGoodbye());
                 return false;
 
             case "/info":

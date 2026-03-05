@@ -14,6 +14,27 @@ public static class ConsoleHelper
     private static readonly string[] _spinnerFrames =
         ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
+    private static readonly string[] _goodbyeMessages =
+    [
+        "Later, nerd.",
+        "May your bugs be few and your commits be clean.",
+        "Don't forget to touch grass.",
+        "This conversation will self-destruct in 3... 2... just kidding.",
+        "Go hydrate, you beautiful developer.",
+        "See you next time, same terminal, same channel.",
+        "Remember: it's not a bug, it's a feature.",
+        "You've been terminated... from this session.",
+        "Until next time, happy hacking!",
+        "Goodbye! Thanks for chatting.",
+        "Peace out, code warrior.",
+        "May your tests always pass on the first try.",
+        "Off you go. The terminal will miss you.",
+        "Attack pattern Shinzon Theta!"
+    ];
+
+    public static string GetRandomGoodbye()
+        => _goodbyeMessages[Random.Shared.Next(_goodbyeMessages.Length)];
+
     public static void StartThinkingAnimation()
     {
         _thinkingCts = new CancellationTokenSource();
