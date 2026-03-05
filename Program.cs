@@ -38,7 +38,7 @@ CoconaApp.Run(async (
 {
     logger.LogInformation("termuddle starting");
     var cli = new CliOptions(baseUrl, apiKey, model, stream, tps);
-    var prefs = await StartupHelper.ResolvePreferencesAsync(cli);
+    var prefs = await StartupHelper.ResolveConfigAsync(cli);
 
     if (prefs is null)
         return 1;

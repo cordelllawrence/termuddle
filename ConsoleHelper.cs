@@ -651,7 +651,7 @@ public static class ConsoleHelper
     public static string ReadInputDefault(string prompt, string defaultValue)
     {
         EnsureCursorVisible();
-        AnsiConsole.Markup($"[yellow]{Markup.Escape(prompt)} [{Markup.Escape(defaultValue)}]: [/]");
+        AnsiConsole.Markup($"[yellow]{Markup.Escape(prompt)} [[{Markup.Escape(defaultValue)}]]: [/]");
         Console.ForegroundColor = ConsoleColor.White;
         var input = Console.ReadLine()?.Trim();
         Console.ResetColor();

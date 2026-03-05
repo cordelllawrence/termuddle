@@ -5,15 +5,15 @@ public record CliOptions(string? BaseUrl, string? ApiKey, string? Model, bool? S
 public static class StartupHelper
 {
     /// <summary>
-    /// Resolves preferences from saved file, CLI overrides, or the setup wizard.
+    /// Resolves config from saved file, CLI overrides, or the setup wizard.
     /// Returns null if the wizard fails (connection error, no models, invalid selection).
     /// </summary>
-    public static async Task<Preferences?> ResolvePreferencesAsync(CliOptions cli)
+    public static async Task<ConfigHelper?> ResolveConfigAsync(CliOptions cli)
     {
-        var prefs = Preferences.Load();
+        var config = ConfigHelper.Load();
 
-        if (prefs is not null)
-            return ApplyCliOverrides(prefs, cli);
+        if (config is not null)
+            return ApplyCliOverrides(config, cli);
 
         if (cli.BaseUrl is not null && cli.Model is not null)
             return FromCliOptions(cli);
@@ -21,21 +21,21 @@ public static class StartupHelper
         return await RunSetupWizardAsync();
     }
 
-    private static Preferences ApplyCliOverrides(Preferences prefs, CliOptions cli)
+    private static ConfigHelper ApplyCliOverrides(ConfigHelper config, CliOptions cli)
     {
-        if (cli.BaseUrl is not null) prefs.BaseUrl = cli.BaseUrl;
-        if (cli.ApiKey is not null) prefs.ApiKey = cli.ApiKey;
-        if (cli.Model is not null) prefs.Model = cli.Model;
-        if (cli.Stream is not null) prefs.StreamResponses = cli.Stream.Value;
-        if (cli.Tps is not null) prefs.ShowTps = cli.Tps.Value;
+        if (cli.BaseUrl is not null) config.BaseUrl = cli.BaseUrl;
+        if (cli.ApiKey is not null) config.ApiKey = cli.ApiKey;
+        if (cli.Model is not null) config.Model = cli.Model;
+        if (cli.Stream is not null) config.StreamResponses = cli.Stream.Value;
+        if (cli.Tps is not null) config.ShowTps = cli.Tps.Value;
 
-        ConsoleHelper.WriteSystem($"Loaded preferences: {prefs.BaseUrl}, model={prefs.Model}");
-        return prefs;
+        ConsoleHelper.WriteSystem($"Loaded config: {config.BaseUrl}, model={config.Model}");
+        return config;
     }
 
-    private static Preferences FromCliOptions(CliOptions cli)
+    private static ConfigHelper FromCliOptions(CliOptions cli)
     {
-        var prefs = new Preferences
+        var config = new ConfigHelper
         {
             BaseUrl = cli.BaseUrl!,
             ApiKey = cli.ApiKey ?? string.Empty,
@@ -43,11 +43,11 @@ public static class StartupHelper
             StreamResponses = cli.Stream ?? false,
             ShowTps = cli.Tps ?? false
         };
-        ConsoleHelper.WriteSystem($"Using CLI args: {prefs.BaseUrl}, model={prefs.Model}");
-        return prefs;
+        ConsoleHelper.WriteSystem($"Using CLI args: {config.BaseUrl}, model={config.Model}");
+        return config;
     }
 
-    private static async Task<Preferences?> RunSetupWizardAsync()
+    private static async Task<ConfigHelper?> RunSetupWizardAsync()
     {
         ConsoleHelper.WriteSystem("Welcome to termuddle! Let's set things up.");
         Console.WriteLine();
@@ -96,16 +96,16 @@ public static class StartupHelper
             return null;
         }
 
-        var prefs = new Preferences
+        var config = new ConfigHelper
         {
             BaseUrl = baseUrl,
             ApiKey = apiKey,
             Model = models[index - 1]
         };
-        prefs.Save();
-        ConsoleHelper.WriteSystem($"Preferences saved to {Preferences.DefaultPath}");
+        config.Save();
+        ConsoleHelper.WriteSystem($"Config saved to {ConfigHelper.DefaultPath}");
         Console.WriteLine();
 
-        return prefs;
+        return config;
     }
 }

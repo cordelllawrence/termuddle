@@ -5,7 +5,7 @@ namespace termuddle;
 
 public class ChatSession
 {
-    public Preferences Preferences { get; set; } = new();
+    public ConfigHelper Preferences { get; set; } = new();
 
     public string BaseUrl
     {

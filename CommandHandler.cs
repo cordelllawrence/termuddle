@@ -6,12 +6,14 @@ public static class CommandHandler
 {
     public static readonly string[] Commands = [
         "/bye", "/info", "/help", "/clear", "/stream", "/tps",
-        "/models", "/switch", "/preferences"
+        "/model", "/config", "/backup"
     ];
 
     public static readonly Dictionary<string, string[]> Subcommands = new()
     {
-        ["/preferences"] = ["show", "set", "backup", "list", "load", "remove"]
+        ["/model"] = ["list", "use"],
+        ["/config"] = ["show", "set", "reset"],
+        ["/backup"] = ["list", "load", "remove"]
     };
 
     /// <summary>
@@ -29,35 +31,12 @@ public static class CommandHandler
                 return false;
 
             case "/info":
-                int sent = session.History.Count(m => m.Role == ChatRole.User);
-                int received = session.History.Count(m => m.Role == ChatRole.Assistant);
-                ConsoleHelper.WriteInfo($"Base URL:           {session.BaseUrl}");
-                ConsoleHelper.WriteInfo($"API Key:            {MaskApiKey(session.ApiKey)}");
-                ConsoleHelper.WriteInfo($"Model:              {session.ModelName}");
-                ConsoleHelper.WriteInfo($"Streaming:          {(session.StreamResponses ? "on" : "off")}");
-                ConsoleHelper.WriteInfo($"Show TPS:           {(session.ShowTps ? "on" : "off")}");
-                ConsoleHelper.WriteInfo($"Messages sent:      {sent}");
-                ConsoleHelper.WriteInfo($"Messages received:  {received}");
+                HandleInfo(session);
                 break;
 
             case "/help":
             case "/?":
-                ConsoleHelper.WriteInfo("Available commands:");
-                ConsoleHelper.WriteInfo("  /bye                              - Exit the application");
-                ConsoleHelper.WriteInfo("  /info                             - Show session information");
-                ConsoleHelper.WriteInfo("  /help                             - Show this help message");
-                ConsoleHelper.WriteInfo("  /clear                            - Clear conversation history");
-                ConsoleHelper.WriteInfo("  /stream                           - Toggle streaming responses on/off");
-                ConsoleHelper.WriteInfo("  /tps                              - Toggle tokens per second display on/off");
-                ConsoleHelper.WriteInfo("  /models                           - List available models");
-                ConsoleHelper.WriteInfo("  /switch <model|number>            - Switch to a different model (name, number, or partial match)");
-                ConsoleHelper.WriteInfo("  /preferences show                 - Show current preferences");
-                ConsoleHelper.WriteInfo("  /preferences set <key>=<value>    - Update a preference");
-                ConsoleHelper.WriteInfo("  /preferences backup               - Backup current preferences");
-                ConsoleHelper.WriteInfo("  /preferences list                 - List preference backups");
-                ConsoleHelper.WriteInfo("  /preferences load <N>             - Restore Nth backup");
-                ConsoleHelper.WriteInfo("  /preferences remove <N>           - Remove Nth backup");
-                ConsoleHelper.WriteInfo("    Keys: base_url, api_key, model, stream, tps");
+                HandleHelp();
                 break;
 
             case "/stream":
@@ -77,16 +56,16 @@ public static class CommandHandler
                 ConsoleHelper.WriteSystem("Conversation history cleared.");
                 break;
 
-            case "/models":
-                await HandleModelsAsync(session);
+            case "/model":
+                await HandleModelAsync(parts, session);
                 break;
 
-            case "/switch":
-                await HandleSwitchAsync(parts, session);
+            case "/config":
+                HandleConfig(parts, session);
                 break;
 
-            case "/preferences":
-                HandlePreferences(parts, session);
+            case "/backup":
+                HandleBackup(parts, session);
                 break;
 
             default:
@@ -97,7 +76,63 @@ public static class CommandHandler
         return true;
     }
 
-    private static async Task HandleModelsAsync(ChatSession session)
+    private static void HandleInfo(ChatSession session)
+    {
+        int sent = session.History.Count(m => m.Role == ChatRole.User);
+        int received = session.History.Count(m => m.Role == ChatRole.Assistant);
+        ConsoleHelper.WriteInfo($"Base URL:           {session.BaseUrl}");
+        ConsoleHelper.WriteInfo($"API Key:            {MaskApiKey(session.ApiKey)}");
+        ConsoleHelper.WriteInfo($"Model:              {session.ModelName}");
+        ConsoleHelper.WriteInfo($"Streaming:          {(session.StreamResponses ? "on" : "off")}");
+        ConsoleHelper.WriteInfo($"Show TPS:           {(session.ShowTps ? "on" : "off")}");
+        ConsoleHelper.WriteInfo($"Messages sent:      {sent}");
+        ConsoleHelper.WriteInfo($"Messages received:  {received}");
+    }
+
+    private static void HandleHelp()
+    {
+        ConsoleHelper.WriteInfo("Available commands:");
+        ConsoleHelper.WriteInfo("  /help                          - Show this help message");
+        ConsoleHelper.WriteInfo("  /info                          - Show session information");
+        ConsoleHelper.WriteInfo("  /clear                         - Clear conversation history");
+        ConsoleHelper.WriteInfo("  /stream                        - Toggle streaming on/off");
+        ConsoleHelper.WriteInfo("  /tps                           - Toggle tokens/sec display on/off");
+        ConsoleHelper.WriteInfo("  /model list                    - List available models");
+        ConsoleHelper.WriteInfo("  /model use <name|N>            - Switch to a model (name, number, or partial match)");
+        ConsoleHelper.WriteInfo("  /config show                   - Show current config");
+        ConsoleHelper.WriteInfo("  /config set <key>=<value>      - Update a config value");
+        ConsoleHelper.WriteInfo("  /config reset                  - Reload config from disk");
+        ConsoleHelper.WriteInfo("  /backup                        - Create a config backup");
+        ConsoleHelper.WriteInfo("  /backup list                   - List config backups");
+        ConsoleHelper.WriteInfo("  /backup load <N>               - Restore Nth backup");
+        ConsoleHelper.WriteInfo("  /backup remove <N>             - Remove Nth backup");
+        ConsoleHelper.WriteInfo("  /bye                           - Exit the application");
+        ConsoleHelper.WriteInfo("    Config keys: base_url, api_key, model, stream, tps");
+    }
+
+    // --- /model ---
+
+    private static async Task HandleModelAsync(string[] parts, ChatSession session)
+    {
+        var sub = parts.Length >= 2 ? parts[1].ToLowerInvariant() : "list";
+
+        switch (sub)
+        {
+            case "list":
+            case "ls":
+                await HandleModelListAsync(session);
+                break;
+            case "use":
+            case "switch":
+                await HandleModelUseAsync(parts, session);
+                break;
+            default:
+                ConsoleHelper.WriteError("Usage: /model list | use <name|N>");
+                break;
+        }
+    }
+
+    private static async Task HandleModelListAsync(ChatSession session)
     {
         try
         {
@@ -124,15 +159,15 @@ public static class CommandHandler
         }
     }
 
-    private static async Task HandleSwitchAsync(string[] parts, ChatSession session)
+    private static async Task HandleModelUseAsync(string[] parts, ChatSession session)
     {
-        if (parts.Length < 2)
+        if (parts.Length < 3)
         {
-            ConsoleHelper.WriteError("Usage: /switch <model|number>");
+            ConsoleHelper.WriteError("Usage: /model use <name|N>");
             return;
         }
 
-        var input = parts[1];
+        var input = parts[2];
 
         try
         {
@@ -142,17 +177,14 @@ public static class CommandHandler
 
             string? resolved = null;
 
-            // Try as a number (index from /models listing)
             if (int.TryParse(input, out var index) && index >= 1 && index <= models.Count)
             {
                 resolved = models[index - 1];
             }
-            // Try exact match
             else if (models.Contains(input))
             {
                 resolved = input;
             }
-            // Try fuzzy match (case-insensitive contains)
             else
             {
                 var matches = models
@@ -168,14 +200,14 @@ public static class CommandHandler
                     ConsoleHelper.WriteError($"'{input}' matches multiple models:");
                     foreach (var m in matches)
                         ConsoleHelper.WriteError($"  - {m}");
-                    ConsoleHelper.WriteError("Be more specific, or use the model number from /models.");
+                    ConsoleHelper.WriteError("Be more specific, or use the model number from /model list.");
                     return;
                 }
             }
 
             if (resolved is null)
             {
-                ConsoleHelper.WriteError($"Model '{input}' not found. Use /models to see available models.");
+                ConsoleHelper.WriteError($"Model '{input}' not found. Use /model list to see available models.");
                 return;
             }
 
@@ -189,59 +221,44 @@ public static class CommandHandler
         }
     }
 
-    private static void HandlePreferences(string[] parts, ChatSession session)
+    // --- /config ---
+
+    private static void HandleConfig(string[] parts, ChatSession session)
     {
-        if (parts.Length < 2)
-        {
-            ConsoleHelper.WriteError("Usage: /preferences show | set <key>=<value> | backup | list | load <N> | remove <N>");
-            return;
-        }
+        var sub = parts.Length >= 2 ? parts[1].ToLowerInvariant() : "show";
 
-        var subCommand = parts[1].ToLowerInvariant();
-
-        switch (subCommand)
+        switch (sub)
         {
             case "show":
-                HandlePreferencesShow(session);
+                HandleConfigShow(session);
                 break;
             case "set":
-                HandlePreferencesSet(parts, session);
+                HandleConfigSet(parts, session);
                 break;
-            case "backup":
-                var backupFile = session.Preferences.Backup();
-                ConsoleHelper.WriteSystem($"Preferences backed up to: {backupFile}");
-                break;
-            case "list":
-                HandlePreferencesList();
-                break;
-            case "load":
-                HandlePreferencesLoad(parts, session);
-                break;
-            case "remove":
-            case "delete":
-                HandlePreferencesRemove(parts);
+            case "reset":
+                HandleConfigReset(session);
                 break;
             default:
-                ConsoleHelper.WriteError("Usage: /preferences show | set <key>=<value> | backup | list | load <N> | remove <N>");
+                ConsoleHelper.WriteError("Usage: /config show | set <key>=<value> | reset");
                 break;
         }
     }
 
-    private static void HandlePreferencesShow(ChatSession session)
+    private static void HandleConfigShow(ChatSession session)
     {
         ConsoleHelper.WriteInfo($"base_url  = {session.Preferences.BaseUrl}");
         ConsoleHelper.WriteInfo($"api_key   = {MaskApiKey(session.Preferences.ApiKey)}");
         ConsoleHelper.WriteInfo($"model     = {session.Preferences.Model}");
         ConsoleHelper.WriteInfo($"stream    = {session.Preferences.StreamResponses.ToString().ToLowerInvariant()}");
         ConsoleHelper.WriteInfo($"tps       = {session.Preferences.ShowTps.ToString().ToLowerInvariant()}");
-        ConsoleHelper.WriteInfo($"File: {Preferences.DefaultPath}");
+        ConsoleHelper.WriteInfo($"File: {ConfigHelper.DefaultPath}");
     }
 
-    private static void HandlePreferencesSet(string[] parts, ChatSession session)
+    private static void HandleConfigSet(string[] parts, ChatSession session)
     {
         if (parts.Length < 3 || !parts[2].Contains('='))
         {
-            ConsoleHelper.WriteError("Usage: /preferences set <key>=<value>");
+            ConsoleHelper.WriteError("Usage: /config set <key>=<value>");
             ConsoleHelper.WriteError("  Keys: base_url, api_key, model, stream, tps");
             return;
         }
@@ -325,22 +342,71 @@ public static class CommandHandler
                 break;
 
             default:
-                ConsoleHelper.WriteError($"Unknown preference key: {key}");
+                ConsoleHelper.WriteError($"Unknown config key: {key}");
                 ConsoleHelper.WriteError("  Keys: base_url, api_key, model, stream, tps");
                 break;
         }
     }
 
-    private static void HandlePreferencesList()
+    private static void HandleConfigReset(ChatSession session)
     {
-        var backups = Preferences.ListBackups();
+        var loaded = ConfigHelper.Load();
+        if (loaded is null)
+        {
+            ConsoleHelper.WriteError($"No config file found at {ConfigHelper.DefaultPath}");
+            return;
+        }
+
+        session.Preferences = loaded;
+        session.Reconnect();
+        ConsoleHelper.WriteSystem("Config reloaded from disk and reconnected.");
+    }
+
+    // --- /backup ---
+
+    private static void HandleBackup(string[] parts, ChatSession session)
+    {
+        var sub = parts.Length >= 2 ? parts[1].ToLowerInvariant() : null;
+
+        // bare /backup with no subcommand creates a backup
+        if (sub is null)
+        {
+            var backupFile = session.Preferences.Backup();
+            ConsoleHelper.WriteSystem($"Config backed up to: {backupFile}");
+            return;
+        }
+
+        switch (sub)
+        {
+            case "list":
+            case "ls":
+                HandleBackupList();
+                break;
+            case "load":
+            case "restore":
+                HandleBackupLoad(parts, session);
+                break;
+            case "remove":
+            case "delete":
+            case "rm":
+                HandleBackupRemove(parts);
+                break;
+            default:
+                ConsoleHelper.WriteError("Usage: /backup | /backup list | load <N> | remove <N>");
+                break;
+        }
+    }
+
+    private static void HandleBackupList()
+    {
+        var backups = ConfigHelper.ListBackups();
         if (backups.Count == 0)
         {
             ConsoleHelper.WriteInfo("No backups found.");
             return;
         }
 
-        ConsoleHelper.WriteInfo("Preference backups:");
+        ConsoleHelper.WriteInfo("Config backups:");
         for (int i = 0; i < backups.Count; i++)
         {
             var (fileName, prefs) = backups[i];
@@ -349,18 +415,18 @@ public static class CommandHandler
         }
     }
 
-    private static void HandlePreferencesLoad(string[] parts, ChatSession session)
+    private static void HandleBackupLoad(string[] parts, ChatSession session)
     {
         if (parts.Length < 3 || !int.TryParse(parts[2], out var loadIndex))
         {
-            ConsoleHelper.WriteError("Usage: /preferences load <N> (use /preferences list to see backups)");
+            ConsoleHelper.WriteError("Usage: /backup load <N> (use /backup list to see backups)");
             return;
         }
 
-        var loaded = Preferences.LoadBackup(loadIndex);
+        var loaded = ConfigHelper.LoadBackup(loadIndex);
         if (loaded is null)
         {
-            ConsoleHelper.WriteError($"Backup #{loadIndex} not found. Use /preferences list to see available backups.");
+            ConsoleHelper.WriteError($"Backup #{loadIndex} not found. Use /backup list to see available backups.");
             return;
         }
 
@@ -385,18 +451,18 @@ public static class CommandHandler
         }
     }
 
-    private static void HandlePreferencesRemove(string[] parts)
+    private static void HandleBackupRemove(string[] parts)
     {
         if (parts.Length < 3 || !int.TryParse(parts[2], out var removeIndex))
         {
-            ConsoleHelper.WriteError("Usage: /preferences remove <N> (use /preferences list to see backups)");
+            ConsoleHelper.WriteError("Usage: /backup remove <N> (use /backup list to see backups)");
             return;
         }
 
-        var allBackups = Preferences.ListBackups();
+        var allBackups = ConfigHelper.ListBackups();
         if (removeIndex < 1 || removeIndex > allBackups.Count)
         {
-            ConsoleHelper.WriteError($"Backup #{removeIndex} not found. Use /preferences list to see available backups.");
+            ConsoleHelper.WriteError($"Backup #{removeIndex} not found. Use /backup list to see available backups.");
             return;
         }
 
@@ -405,7 +471,7 @@ public static class CommandHandler
         var confirm = ConsoleHelper.ReadInput().Trim().ToLowerInvariant();
         if (confirm is "y" or "yes")
         {
-            Preferences.RemoveBackup(removeIndex);
+            ConfigHelper.RemoveBackup(removeIndex);
             ConsoleHelper.WriteSystem($"Backup #{removeIndex} removed.");
         }
         else
