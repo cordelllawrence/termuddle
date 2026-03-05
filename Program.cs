@@ -53,8 +53,7 @@ CoconaApp.Run(async (
     while (true)
     {
         ConsoleHelper.EnsureCursorVisible();
-        var timestamp = DateTime.Now.ToString("yyyy-MM-dd hh:mm:ss tt");
-        ConsoleHelper.WritePrompt($"[{timestamp}] You> ");
+        ConsoleHelper.WritePrompt("> ");
 
         // Read input (with multi-line support via trailing \)
         var input = ReadMultiLineInput();
