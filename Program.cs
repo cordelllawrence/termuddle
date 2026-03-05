@@ -1,5 +1,6 @@
 using Cocona;
 using Microsoft.Extensions.AI;
+using Spectre.Console;
 using tuichat;
 
 CoconaApp.Run(async (
@@ -12,7 +13,7 @@ CoconaApp.Run(async (
 {
     var cli = new CliOptions(baseUrl, apiKey, model, stream, tps);
     var prefs = await StartupHelper.ResolvePreferencesAsync(cli);
-    
+
     if (prefs is null)
         return 1;
 
@@ -32,22 +33,26 @@ CoconaApp.Run(async (
     Console.CancelKeyPress += (_, e) =>
     {
         e.Cancel = true;
+        TerminalLayout.ResetLayout();
         ConsoleHelper.WriteSystem("\nGoodbye! Thanks for chatting.");
         Environment.Exit(0);
     };
 
     // --- Startup Banner ---
-    ConsoleHelper.WriteSystem("╔══════════════════════════════════════╗");
-    ConsoleHelper.WriteSystem("║            tuichat                   ║");
-    ConsoleHelper.WriteSystem("╚══════════════════════════════════════╝");
-    ConsoleHelper.WriteSystem($"API: {session.BaseUrl} | Model: {session.ModelName}");
-    ConsoleHelper.WriteSystem("Type /help for commands, /bye to exit.");
-    ConsoleHelper.WriteSystem("Use \\ at end of line for multi-line input.");
-    Console.WriteLine();
+    AnsiConsole.Write(
+        new Panel($"[yellow]API:[/] {Markup.Escape(session.BaseUrl)} | [yellow]Model:[/] {Markup.Escape(session.ModelName)}\nType /help for commands, /bye to exit.\nUse \\ at end of line for multi-line input.")
+            .Header("[yellow bold]tuichat[/]")
+            .BorderColor(Color.Yellow)
+            .Padding(1, 0));
+    AnsiConsole.WriteLine();
+
+    // --- Initialize Terminal Layout ---
+    TerminalLayout.Initialize();
 
     // --- REPL Loop ---
     while (true)
     {
+        ConsoleHelper.EnsureCursorVisible();
         var timestamp = DateTime.Now.ToString("yyyy-MM-dd hh:mm:ss tt");
         ConsoleHelper.WritePrompt($"[{timestamp}] You> ");
 
@@ -61,8 +66,10 @@ CoconaApp.Run(async (
         if (input.StartsWith('/'))
         {
             if (!await CommandHandler.HandleAsync(input, session))
+            {
+                TerminalLayout.ResetLayout();
                 return 0;
-            Console.WriteLine();
+            }
             continue;
         }
 
@@ -76,32 +83,28 @@ CoconaApp.Run(async (
 
             if (session.StreamResponses)
             {
-                Console.ForegroundColor = ConsoleColor.Cyan;
                 var fullResponse = new System.Text.StringBuilder();
+                TerminalLayout.BeginStreamOutput();
                 await foreach (var update in session.ChatClient.GetStreamingResponseAsync(session.History, session.ChatOptions))
                 {
                     var chunk = update.Text ?? string.Empty;
-                    Console.Write(chunk);
+                    ConsoleHelper.WriteStreamChunk(chunk);
                     fullResponse.Append(chunk);
                     tokenCount++;
                 }
-                Console.ResetColor();
                 Console.WriteLine();
+                TerminalLayout.EndStreamOutput();
                 session.History.Add(new ChatMessage(ChatRole.Assistant, fullResponse.ToString()));
             }
             else
             {
-                // Thinking indicator
-                Console.ForegroundColor = ConsoleColor.DarkGray;
-                Console.Write("Thinking...");
+                ChatResponse? response = null;
+                // For non-streaming, show a simple waiting message
+                ConsoleHelper.WriteSystem("Thinking...");
+                response = await session.ChatClient.GetResponseAsync(session.History, session.ChatOptions);
 
-                var response = await session.ChatClient.GetResponseAsync(session.History, session.ChatOptions);
-                var responseText = response.Text ?? string.Empty;
+                var responseText = response!.Text ?? string.Empty;
                 tokenCount = responseText.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
-
-                // Clear the "Thinking..." text
-                Console.Write("\r            \r");
-                Console.ResetColor();
 
                 ConsoleHelper.WriteResponse(responseText);
                 session.History.Add(new ChatMessage(ChatRole.Assistant, responseText));
@@ -117,12 +120,8 @@ CoconaApp.Run(async (
         }
         catch (Exception ex)
         {
-            Console.Write("\r            \r");
-            Console.ResetColor();
             ConsoleHelper.WriteError($"Error: {ex.Message}");
         }
-
-        Console.WriteLine();
     }
 });
 
