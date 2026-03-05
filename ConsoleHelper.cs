@@ -25,18 +25,18 @@ public static class ConsoleHelper
         if (TerminalLayout.IsInitialized)
         {
             TerminalLayout.ClearInputArea();
-            AnsiConsole.Markup($"[green]{Markup.Escape(prompt)}[/]");
+            AnsiConsole.Markup($"[white]{Markup.Escape(prompt)}[/]");
         }
         else
         {
-            AnsiConsole.Markup($"[green]{Markup.Escape(prompt)}[/]");
+            AnsiConsole.Markup($"[white]{Markup.Escape(prompt)}[/]");
         }
     }
 
     public static void WriteResponse(string message)
     {
         TerminalLayout.WriteToOutputArea(() =>
-            AnsiConsole.MarkupLine($"[cyan]{Markup.Escape(message)}[/]"));
+            AnsiConsole.MarkupLine($"[blue]{Markup.Escape(message)}[/]"));
     }
 
     public static void WriteInfo(string message)
@@ -48,7 +48,7 @@ public static class ConsoleHelper
     public static void WriteStreamChunk(string chunk)
     {
         // During streaming, cursor is already in the output area (via BeginStreamOutput)
-        AnsiConsole.Markup($"[cyan]{Markup.Escape(chunk)}[/]");
+        AnsiConsole.Markup($"[blue]{Markup.Escape(chunk)}[/]");
     }
 
     public static void EnsureCursorVisible()
@@ -59,7 +59,7 @@ public static class ConsoleHelper
     public static string ReadInput()
     {
         EnsureCursorVisible();
-        Console.ForegroundColor = ConsoleColor.Green;
+        Console.ForegroundColor = ConsoleColor.White;
 
         if (TerminalLayout.IsInitialized)
         {
@@ -99,7 +99,7 @@ public static class ConsoleHelper
     public static string ReadInputWithHistory()
     {
         EnsureCursorVisible();
-        Console.ForegroundColor = ConsoleColor.Green;
+        Console.ForegroundColor = ConsoleColor.White;
 
         if (!TerminalLayout.IsInitialized)
             return ReadInputWithHistoryClassic();
@@ -216,7 +216,7 @@ public static class ConsoleHelper
                     TerminalLayout.WriteToOutputArea(() =>
                     {
                         var timestamp = DateTime.Now.ToString("yyyy-MM-dd hh:mm:ss tt");
-                        AnsiConsole.MarkupLine($"[green]{Markup.Escape($"[{timestamp}] You> ")}{Markup.Escape(result)}[/]");
+                        AnsiConsole.MarkupLine($"[dim grey]{Markup.Escape($"[{timestamp}]")}[/] [white]{Markup.Escape("You> ")}{Markup.Escape(result)}[/]");
                     });
                     return result;
 
@@ -472,7 +472,7 @@ public static class ConsoleHelper
     {
         EnsureCursorVisible();
         AnsiConsole.Markup($"[yellow]{Markup.Escape(prompt)} [{Markup.Escape(defaultValue)}]: [/]");
-        Console.ForegroundColor = ConsoleColor.Green;
+        Console.ForegroundColor = ConsoleColor.White;
         var input = Console.ReadLine()?.Trim();
         Console.ResetColor();
         return string.IsNullOrEmpty(input) ? defaultValue : input;
@@ -482,7 +482,7 @@ public static class ConsoleHelper
     {
         EnsureCursorVisible();
         AnsiConsole.Markup($"[yellow]{Markup.Escape(prompt)}: [/]");
-        Console.ForegroundColor = ConsoleColor.Green;
+        Console.ForegroundColor = ConsoleColor.White;
 
         var buffer = new List<char>();
         while (true)
