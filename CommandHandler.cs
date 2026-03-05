@@ -43,6 +43,9 @@ public static class CommandHandler
                 ConsoleHelper.WriteInfo("  /switch <model|number>            - Switch to a different model (name, number, or partial match)");
                 ConsoleHelper.WriteInfo("  /preferences show                 - Show current preferences");
                 ConsoleHelper.WriteInfo("  /preferences set <key>=<value>    - Update a preference");
+                ConsoleHelper.WriteInfo("  /preferences backup               - Backup current preferences");
+                ConsoleHelper.WriteInfo("  /preferences list                 - List preference backups");
+                ConsoleHelper.WriteInfo("  /preferences load <N>             - Restore Nth backup");
                 ConsoleHelper.WriteInfo("    Keys: base_url, api_key, model, stream, tps");
                 break;
 
@@ -179,7 +182,7 @@ public static class CommandHandler
     {
         if (parts.Length < 2)
         {
-            ConsoleHelper.WriteError("Usage: /preferences show | /preferences set <key>=<value>");
+            ConsoleHelper.WriteError("Usage: /preferences show | set <key>=<value> | backup | list | load <N>");
             return;
         }
 
@@ -211,27 +214,52 @@ public static class CommandHandler
                 switch (key)
                 {
                     case "base_url":
-                        session.Preferences.BaseUrl = value;
-                        session.BaseUrl = value;
-                        session.Reconnect();
-                        session.Preferences.Save();
-                        ConsoleHelper.WriteSystem($"Base URL updated to: {value} (reconnected)");
+                        try
+                        {
+                            session.Preferences.BaseUrl = value;
+                            session.BaseUrl = value;
+                            session.Reconnect();
+                            session.Preferences.Save();
+                            ConsoleHelper.WriteSystem($"Base URL updated to: {value} (reconnected)");
+                        }
+                        catch (UriFormatException)
+                        {
+                            ConsoleHelper.WriteError($"Invalid URL: {value}");
+                        }
+                        catch (Exception ex)
+                        {
+                            ConsoleHelper.WriteError($"Failed to set base URL: {ex.Message}");
+                        }
                         break;
 
                     case "api_key":
-                        session.Preferences.ApiKey = value;
-                        session.ApiKey = value;
-                        session.Reconnect();
-                        session.Preferences.Save();
-                        ConsoleHelper.WriteSystem("API key updated (reconnected)");
+                        try
+                        {
+                            session.Preferences.ApiKey = value;
+                            session.ApiKey = value;
+                            session.Reconnect();
+                            session.Preferences.Save();
+                            ConsoleHelper.WriteSystem("API key updated (reconnected)");
+                        }
+                        catch (Exception ex)
+                        {
+                            ConsoleHelper.WriteError($"Failed to set API key: {ex.Message}");
+                        }
                         break;
 
                     case "model":
-                        session.Preferences.Model = value;
-                        session.ModelName = value;
-                        session.Reconnect();
-                        session.Preferences.Save();
-                        ConsoleHelper.WriteSystem($"Default model updated to: {value} (switched)");
+                        try
+                        {
+                            session.Preferences.Model = value;
+                            session.ModelName = value;
+                            session.Reconnect();
+                            session.Preferences.Save();
+                            ConsoleHelper.WriteSystem($"Default model updated to: {value} (switched)");
+                        }
+                        catch (Exception ex)
+                        {
+                            ConsoleHelper.WriteError($"Failed to set model: {ex.Message}");
+                        }
                         break;
 
                     case "stream":
@@ -269,8 +297,69 @@ public static class CommandHandler
                 }
                 break;
 
+            case "backup":
+                var backupFile = session.Preferences.Backup();
+                ConsoleHelper.WriteSystem($"Preferences backed up to: {backupFile}");
+                break;
+
+            case "list":
+                var backups = Preferences.ListBackups();
+                if (backups.Count == 0)
+                {
+                    ConsoleHelper.WriteInfo("No backups found.");
+                }
+                else
+                {
+                    ConsoleHelper.WriteInfo("Preference backups:");
+                    for (int i = 0; i < backups.Count; i++)
+                    {
+                        var (fileName, prefs) = backups[i];
+                        ConsoleHelper.WriteInfo($"  {i + 1}. {fileName}");
+                        ConsoleHelper.WriteInfo($"       base_url={prefs.BaseUrl}  model={prefs.Model}  stream={prefs.StreamResponses.ToString().ToLowerInvariant()}  tps={prefs.ShowTps.ToString().ToLowerInvariant()}");
+                    }
+                }
+                break;
+
+            case "load":
+                if (parts.Length < 3 || !int.TryParse(parts[2], out var loadIndex))
+                {
+                    ConsoleHelper.WriteError("Usage: /preferences load <N> (use /preferences list to see backups)");
+                    return;
+                }
+                var loaded = Preferences.LoadBackup(loadIndex);
+                if (loaded is null)
+                {
+                    ConsoleHelper.WriteError($"Backup #{loadIndex} not found. Use /preferences list to see available backups.");
+                    return;
+                }
+                try
+                {
+                    session.Preferences.BaseUrl = loaded.BaseUrl;
+                    session.Preferences.ApiKey = loaded.ApiKey;
+                    session.Preferences.Model = loaded.Model;
+                    session.Preferences.StreamResponses = loaded.StreamResponses;
+                    session.Preferences.ShowTps = loaded.ShowTps;
+                    session.BaseUrl = loaded.BaseUrl;
+                    session.ApiKey = loaded.ApiKey;
+                    session.ModelName = loaded.Model;
+                    session.StreamResponses = loaded.StreamResponses;
+                    session.ShowTps = loaded.ShowTps;
+                    session.Reconnect();
+                    session.Preferences.Save();
+                    ConsoleHelper.WriteSystem($"Restored backup #{loadIndex} and reconnected.");
+                }
+                catch (UriFormatException)
+                {
+                    ConsoleHelper.WriteError($"Backup contains an invalid base URL: {loaded.BaseUrl}");
+                }
+                catch (Exception ex)
+                {
+                    ConsoleHelper.WriteError($"Failed to restore backup: {ex.Message}");
+                }
+                break;
+
             default:
-                ConsoleHelper.WriteError("Usage: /preferences show | /preferences set <key>=<value>");
+                ConsoleHelper.WriteError("Usage: /preferences show | set <key>=<value> | backup | list | load <N>");
                 break;
         }
     }
