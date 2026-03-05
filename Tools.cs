@@ -1,99 +1,37 @@
-/*Below is a **self‑contained C# example** that shows how you could wrap a generic “web‑search” capability inside a Microsoft Bot Framework (v4) bot.  
-The method `SearchAsync` is the **tool** that the bot can call when it needs to fetch the latest news (or any other query).  
-
-```csharp*/
-using System;
-using System.Collections.Generic;
-using System.Net.Http;
+using System.ComponentModel;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
-using System.Threading.Tasks;
+using Microsoft.Extensions.AI;
 
-// ------------------------------------------------------------
-// 1️⃣  POCOs that model the JSON response from the search API
-// ------------------------------------------------------------
-public class SearchResult
-{
-    [JsonPropertyName("title")]
-    public string Title { get; set; } = string.Empty;
+namespace tuichat;
 
-    [JsonPropertyName("url")]
-    public string Url { get; set; } = string.Empty;
-
-    [JsonPropertyName("snippet")]
-    public string Snippet { get; set; } = string.Empty;
-
-    [JsonPropertyName("published")]
-    public DateTime? Published { get; set; }
-}
-
-// The outer envelope that many search services return
-public class SearchResponse
-{
-    [JsonPropertyName("results")]
-    public List<SearchResult> Results { get; set; } = new();
-}
-
-// ------------------------------------------------------------
-// 2️⃣  The “tool” – an async method that can be called from a
-//     Bot Framework dialog, activity handler, or a
-//     AdaptiveDialog custom action.
-// ------------------------------------------------------------
 public static class WebSearchTool
 {
-    // You can replace this with any public search endpoint
-    // (Bing Web Search API, Google Custom Search, DuckDuckGo
-    // Instant Answer API, etc.).  The example uses the free
-    // DuckDuckGo Instant Answer API because it does not require
-    // an API key for simple queries.
     private const string DuckDuckGoEndpoint = "https://api.duckduckgo.com/";
+    private static readonly HttpClient _http = new();
 
-    private static readonly HttpClient _http = new HttpClient();
-
-    /// <summary>
-    /// Performs a web‑search and returns the top N results.
-    /// </summary>
-    /// <param name="query">What to search for.</param>
-    /// <param name="topN">Maximum number of items to return.</param>
-    /// <param name="recencyDays">
-    /// Optional filter – only return items newer than this many days.
-    /// (The DuckDuckGo endpoint does not support it; you would need a
-    /// paid API for that feature.)
-    /// </param>
-    /// <returns>A list of <see cref="SearchResult"/> objects.</returns>
-    public static async Task<IReadOnlyList<SearchResult>> SearchAsync(
-        string query,
-        int topN = 5,
-        int? recencyDays = null)
+    [Description("Searches the web using DuckDuckGo and returns the top results.")]
+    public static async Task<string> SearchAsync(
+        [Description("The search query")] string query,
+        [Description("Maximum number of results to return")] int topN = 5)
     {
         if (string.IsNullOrWhiteSpace(query))
-            throw new ArgumentException("Query must be provided.", nameof(query));
+            return "Error: query must not be empty.";
 
-        // Build the request URL.
-        // For DuckDuckGo we ask for JSON output and a “no_html” response.
         var url = $"{DuckDuckGoEndpoint}?q={Uri.EscapeDataString(query)}&format=json&no_html=1&skip_disambig=1";
 
-        // Call the endpoint.
         using var response = await _http.GetAsync(url);
         response.EnsureSuccessStatusCode();
 
-        // DuckDuckGo returns a different shape than the POCOs above,
-        // so we map the fields we care about.
         var raw = await response.Content.ReadFromJsonAsync<DuckDuckGoResponse>();
 
-        // Transform into our canonical SearchResult list.
         var results = new List<SearchResult>();
-
-        // The “RelatedTopics” array contains the most useful hits.
-        foreach (var topic in (raw?.RelatedTopics ?? []))
+        foreach (var topic in raw?.RelatedTopics ?? [])
         {
-            // Some topics are nested groups; flatten them.
-            if (topic.Topics != null && topic.Topics.Count > 0)
+            if (topic.Topics is { Count: > 0 })
             {
                 foreach (var sub in topic.Topics)
-                {
                     results.Add(ConvertTopic(sub));
-                }
             }
             else
             {
@@ -103,31 +41,42 @@ public static class WebSearchTool
             if (results.Count >= topN) break;
         }
 
-        // Optional recency filter – only works when the source supplies a date.
-        if (recencyDays.HasValue)
-        {
-            var cutoff = DateTime.UtcNow.AddDays(-recencyDays.Value);
-            results = results.FindAll(r => r.Published.HasValue && r.Published.Value >= cutoff);
-        }
+        if (results.Count == 0)
+            return "No results found.";
 
-        return results.AsReadOnly();
+        var sb = new System.Text.StringBuilder();
+        foreach (var r in results)
+        {
+            sb.AppendLine($"- {r.Title}");
+            if (!string.IsNullOrWhiteSpace(r.Url))
+                sb.AppendLine($"  {r.Url}");
+            if (!string.IsNullOrWhiteSpace(r.Snippet))
+                sb.AppendLine($"  {r.Snippet}");
+        }
+        return sb.ToString();
     }
 
-    // ------------------------------------------------------------
-    // 3️⃣  Helper: map the DuckDuckGo JSON model to our POCO.
-    // ------------------------------------------------------------
+    public static IList<AITool> CreateTools()
+    {
+        return [AIFunctionFactory.Create(SearchAsync)];
+    }
+
+    internal static HttpClient SharedHttp => _http;
+
     private static SearchResult ConvertTopic(DuckDuckGoTopic topic) => new()
     {
-        Title   = topic.Text?.Split(" - ")[0] ?? string.Empty,
-        Url     = topic.FirstUrl ?? string.Empty,
+        Title = topic.Text?.Split(" - ")[0] ?? string.Empty,
+        Url = topic.FirstUrl ?? string.Empty,
         Snippet = topic.Text ?? string.Empty,
-        // DuckDuckGo does not expose a publish date; leave null.
-        Published = null
     };
 
-    // ------------------------------------------------------------
-    // 4️⃣  Minimal POCOs that match DuckDuckGo’s JSON format.
-    // ------------------------------------------------------------
+    private class SearchResult
+    {
+        public string Title { get; set; } = string.Empty;
+        public string Url { get; set; } = string.Empty;
+        public string Snippet { get; set; } = string.Empty;
+    }
+
     private class DuckDuckGoResponse
     {
         [JsonPropertyName("RelatedTopics")]
@@ -136,57 +85,102 @@ public static class WebSearchTool
 
     private class DuckDuckGoTopic
     {
-        // When the entry is a leaf node:
         [JsonPropertyName("FirstURL")]
         public string? FirstUrl { get; set; }
 
         [JsonPropertyName("Text")]
         public string? Text { get; set; }
 
-        // When the entry is a “category” that contains nested topics:
         [JsonPropertyName("Topics")]
         public List<DuckDuckGoTopic>? Topics { get; set; }
     }
 }
-/*```
 
-### How to call it from a Bot Framework activity handler
-
-```csharp*/
-public class NewsBot : ActivityHandler
+public static class WebFetchTool
 {
-    protected override async Task OnMessageActivityAsync(ITurnContext<IMessageActivity> turnContext,
-                                                          CancellationToken cancellationToken)
+    private const int MaxContentLength = 20_000;
+
+    [Description("Fetches the content of a web page at the given URL and returns it as plain text. Useful for reading articles, documentation, or any web page.")]
+    public static async Task<string> FetchAsync(
+        [Description("The URL to fetch")] string url)
     {
-        var userInput = turnContext.Activity.Text?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(url))
+            return "Error: URL must not be empty.";
 
-        // Very simple intent detection – if the user asks for “news”, we invoke the tool.
-        if (userInput.Contains("news", StringComparison.OrdinalIgnoreCase) ||
-            userInput.Contains("today", StringComparison.OrdinalIgnoreCase))
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != "http" && uri.Scheme != "https"))
+            return "Error: Invalid URL. Must be an absolute HTTP or HTTPS URL.";
+
+        try
         {
-            // Example query: “latest news Trinidad Express”
-            var results = await WebSearchTool.SearchAsync("Trinidad Express latest news", topN: 5);
+            using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+            request.Headers.UserAgent.ParseAdd("tuichat/1.0");
+            request.Headers.Accept.ParseAdd("text/html, text/plain, application/json");
 
-            if (results.Count == 0)
-            {
-                await turnContext.SendActivityAsync("I couldn't find any recent stories.", cancellationToken: cancellationToken);
-                return;
-            }
+            using var response = await WebSearchTool.SharedHttp.SendAsync(request);
+            response.EnsureSuccessStatusCode();
 
-            var reply = "Here are the 5 most recent stories I could locate:\n\n";
-            foreach (var r in results)
-            {
-                reply += $"- **{r.Title}**\n  {r.Url}\n";
-                if (!string.IsNullOrWhiteSpace(r.Snippet))
-                    reply += $"  {r.Snippet}\n";
-                reply += "\n";
-            }
+            var content = await response.Content.ReadAsStringAsync();
+            var contentType = response.Content.Headers.ContentType?.MediaType ?? "";
 
-            await turnContext.SendActivityAsync(reply, cancellationToken: cancellationToken);
+            if (contentType.Contains("html"))
+                content = StripHtmlTags(content);
+
+            if (content.Length > MaxContentLength)
+                content = content[..MaxContentLength] + "\n\n[Content truncated]";
+
+            return content;
         }
-        else
+        catch (HttpRequestException ex)
         {
-            await turnContext.SendActivityAsync("I’m not sure how to help with that. Try asking for today’s news.", cancellationToken: cancellationToken);
+            return $"Error fetching URL: {ex.Message}";
         }
+        catch (TaskCanceledException)
+        {
+            return "Error: Request timed out.";
+        }
+    }
+
+    public static IList<AITool> CreateTools()
+    {
+        return [AIFunctionFactory.Create(FetchAsync)];
+    }
+
+    private static string StripHtmlTags(string html)
+    {
+        // Remove script and style blocks entirely
+        html = System.Text.RegularExpressions.Regex.Replace(
+            html, @"<(script|style)[^>]*>[\s\S]*?</\1>", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        // Replace common block elements with newlines
+        html = System.Text.RegularExpressions.Regex.Replace(
+            html, @"<(br|p|div|h[1-6]|li|tr)[^>]*>", "\n", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        // Strip remaining tags
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"<[^>]+>", "");
+
+        // Decode common HTML entities
+        html = System.Net.WebUtility.HtmlDecode(html);
+
+        // Collapse whitespace
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"[ \t]+", " ");
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"\n{3,}", "\n\n");
+
+        return html.Trim();
+    }
+}
+
+public static class DateTimeTool
+{
+    [Description("Returns the current date and time in the user's local timezone. Use this when you need to know the current time or date.")]
+    public static string GetCurrentDateTime()
+    {
+        var now = DateTimeOffset.Now;
+        return $"{now:dddd, MMMM d, yyyy h:mm:ss tt} ({now:zzz} UTC)";
+    }
+
+    public static IList<AITool> CreateTools()
+    {
+        return [AIFunctionFactory.Create(GetCurrentDateTime)];
     }
 }

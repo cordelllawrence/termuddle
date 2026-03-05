@@ -13,10 +13,17 @@ public class ChatSession
     public IChatClient ChatClient { get; set; } = null!;
     public List<ChatMessage> History { get; } = new();
     public Preferences Preferences { get; set; } = new();
+    public ChatOptions ChatOptions { get; } = new()
+    {
+        Tools = [..WebSearchTool.CreateTools(), ..WebFetchTool.CreateTools(), ..DateTimeTool.CreateTools()]
+    };
 
     public void Reconnect()
     {
-        ChatClient = CreateChatClient(BaseUrl, ApiKey, ModelName);
+        var rawClient = CreateChatClient(BaseUrl, ApiKey, ModelName);
+        ChatClient = new ChatClientBuilder(rawClient)
+            .UseFunctionInvocation()
+            .Build();
     }
 
     public static IChatClient CreateChatClient(string baseUrl, string apiKey, string model)

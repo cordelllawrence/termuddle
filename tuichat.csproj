@@ -8,6 +8,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Cocona" Version="2.2.0" />
+    <PackageReference Include="Microsoft.Extensions.AI" Version="10.3.0" />
     <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.3.0" />
     <PackageReference Include="OpenAI" Version="2.8.0" />
   </ItemGroup>
