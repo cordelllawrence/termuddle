@@ -46,6 +46,7 @@ public static class CommandHandler
                 ConsoleHelper.WriteInfo("  /preferences backup               - Backup current preferences");
                 ConsoleHelper.WriteInfo("  /preferences list                 - List preference backups");
                 ConsoleHelper.WriteInfo("  /preferences load <N>             - Restore Nth backup");
+                ConsoleHelper.WriteInfo("  /preferences remove <N>           - Remove Nth backup");
                 ConsoleHelper.WriteInfo("    Keys: base_url, api_key, model, stream, tps");
                 break;
 
@@ -182,7 +183,7 @@ public static class CommandHandler
     {
         if (parts.Length < 2)
         {
-            ConsoleHelper.WriteError("Usage: /preferences show | set <key>=<value> | backup | list | load <N>");
+            ConsoleHelper.WriteError("Usage: /preferences show | set <key>=<value> | backup | list | load <N> | remove <N>");
             return;
         }
 
@@ -358,8 +359,35 @@ public static class CommandHandler
                 }
                 break;
 
+            case "remove":
+            case "delete":
+                if (parts.Length < 3 || !int.TryParse(parts[2], out var removeIndex))
+                {
+                    ConsoleHelper.WriteError("Usage: /preferences remove <N> (use /preferences list to see backups)");
+                    return;
+                }
+                var allBackups = Preferences.ListBackups();
+                if (removeIndex < 1 || removeIndex > allBackups.Count)
+                {
+                    ConsoleHelper.WriteError($"Backup #{removeIndex} not found. Use /preferences list to see available backups.");
+                    return;
+                }
+                var (backupName, _) = allBackups[removeIndex - 1];
+                ConsoleHelper.WriteSystem($"Remove backup #{removeIndex} ({backupName})? [y/N] ");
+                var confirm = ConsoleHelper.ReadInput().Trim().ToLowerInvariant();
+                if (confirm is "y" or "yes")
+                {
+                    Preferences.RemoveBackup(removeIndex);
+                    ConsoleHelper.WriteSystem($"Backup #{removeIndex} removed.");
+                }
+                else
+                {
+                    ConsoleHelper.WriteSystem("Cancelled.");
+                }
+                break;
+
             default:
-                ConsoleHelper.WriteError("Usage: /preferences show | set <key>=<value> | backup | list | load <N>");
+                ConsoleHelper.WriteError("Usage: /preferences show | set <key>=<value> | backup | list | load <N> | remove <N>");
                 break;
         }
     }

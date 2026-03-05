@@ -70,4 +70,18 @@ public class Preferences
             return null;
         return backups[index - 1].Prefs;
     }
+
+    public static bool RemoveBackup(int index)
+    {
+        var dir = AppContext.BaseDirectory;
+        var files = Directory.GetFiles(dir, "preferences_backup_*.json")
+            .OrderBy(f => Path.GetFileName(f))
+            .ToList();
+
+        if (index < 1 || index > files.Count)
+            return false;
+
+        File.Delete(files[index - 1]);
+        return true;
+    }
 }
