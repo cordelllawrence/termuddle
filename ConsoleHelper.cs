@@ -51,6 +51,8 @@ public static class ConsoleHelper
     {
         Console.ForegroundColor = ConsoleColor.Green;
 
+        var promptLeft = Console.CursorLeft;
+        var promptTop = Console.CursorTop;
         var buffer = new List<char>();
         var cursorPos = 0;
         _historyIndex = _history.Count; // past the end = "current" (empty)
@@ -75,7 +77,7 @@ public static class ConsoleHelper
                     {
                         buffer.RemoveAt(cursorPos - 1);
                         cursorPos--;
-                        RedrawLine(buffer, cursorPos);
+                        RedrawLine(promptLeft, promptTop, buffer, cursorPos);
                     }
                     break;
 
@@ -83,7 +85,7 @@ public static class ConsoleHelper
                     if (cursorPos < buffer.Count)
                     {
                         buffer.RemoveAt(cursorPos);
-                        RedrawLine(buffer, cursorPos);
+                        RedrawLine(promptLeft, promptTop, buffer, cursorPos);
                     }
                     break;
 
@@ -91,7 +93,7 @@ public static class ConsoleHelper
                     if (cursorPos > 0)
                     {
                         cursorPos--;
-                        Console.SetCursorPosition(Console.CursorLeft - 1, Console.CursorTop);
+                        Console.SetCursorPosition(promptLeft + cursorPos, promptTop);
                     }
                     break;
 
@@ -99,18 +101,18 @@ public static class ConsoleHelper
                     if (cursorPos < buffer.Count)
                     {
                         cursorPos++;
-                        Console.SetCursorPosition(Console.CursorLeft + 1, Console.CursorTop);
+                        Console.SetCursorPosition(promptLeft + cursorPos, promptTop);
                     }
                     break;
 
                 case ConsoleKey.Home:
                     cursorPos = 0;
-                    Console.SetCursorPosition(Console.CursorLeft - cursorPos, Console.CursorTop);
+                    Console.SetCursorPosition(promptLeft, promptTop);
                     break;
 
                 case ConsoleKey.End:
-                    Console.SetCursorPosition(Console.CursorLeft + (buffer.Count - cursorPos), Console.CursorTop);
                     cursorPos = buffer.Count;
+                    Console.SetCursorPosition(promptLeft + cursorPos, promptTop);
                     break;
 
                 case ConsoleKey.UpArrow:
@@ -119,7 +121,7 @@ public static class ConsoleHelper
                         if (_historyIndex == _history.Count)
                             savedCurrent = new string(buffer.ToArray());
                         _historyIndex--;
-                        SetBuffer(buffer, _history[_historyIndex], out cursorPos);
+                        SetBuffer(promptLeft, promptTop, buffer, _history[_historyIndex], out cursorPos);
                     }
                     break;
 
@@ -130,7 +132,7 @@ public static class ConsoleHelper
                         var text = _historyIndex == _history.Count
                             ? savedCurrent ?? ""
                             : _history[_historyIndex];
-                        SetBuffer(buffer, text, out cursorPos);
+                        SetBuffer(promptLeft, promptTop, buffer, text, out cursorPos);
                     }
                     break;
 
@@ -145,7 +147,7 @@ public static class ConsoleHelper
                         }
                         else
                         {
-                            RedrawLine(buffer, cursorPos);
+                            RedrawLine(promptLeft, promptTop, buffer, cursorPos);
                         }
                     }
                     break;
@@ -153,30 +155,28 @@ public static class ConsoleHelper
         }
     }
 
-    private static void SetBuffer(List<char> buffer, string text, out int cursorPos)
+    private static void SetBuffer(int promptLeft, int promptTop, List<char> buffer, string text, out int cursorPos)
     {
-        var promptLeft = Console.CursorLeft - buffer.Count;
+        var oldLen = buffer.Count;
         buffer.Clear();
         buffer.AddRange(text);
         cursorPos = buffer.Count;
 
-        // Clear old text and write new
-        Console.SetCursorPosition(promptLeft, Console.CursorTop);
+        Console.SetCursorPosition(promptLeft, promptTop);
         Console.Write(text);
         // Clear any leftover characters from a longer previous line
-        var clearCount = Console.BufferWidth - Console.CursorLeft - 1;
+        var clearCount = oldLen - text.Length;
         if (clearCount > 0)
             Console.Write(new string(' ', clearCount));
-        Console.SetCursorPosition(promptLeft + cursorPos, Console.CursorTop);
+        Console.SetCursorPosition(promptLeft + cursorPos, promptTop);
     }
 
-    private static void RedrawLine(List<char> buffer, int cursorPos)
+    private static void RedrawLine(int promptLeft, int promptTop, List<char> buffer, int cursorPos)
     {
-        var promptLeft = Console.CursorLeft - cursorPos;
-        Console.SetCursorPosition(promptLeft, Console.CursorTop);
+        Console.SetCursorPosition(promptLeft, promptTop);
         var text = new string(buffer.ToArray());
         Console.Write(text + " "); // extra space clears trailing char on delete
-        Console.SetCursorPosition(promptLeft + cursorPos, Console.CursorTop);
+        Console.SetCursorPosition(promptLeft + cursorPos, promptTop);
     }
 
     public static string ReadInputDefault(string prompt, string defaultValue)
@@ -188,5 +188,38 @@ public static class ConsoleHelper
         var input = Console.ReadLine()?.Trim();
         Console.ResetColor();
         return string.IsNullOrEmpty(input) ? defaultValue : input;
+    }
+
+    public static string ReadInputMasked(string prompt)
+    {
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.Write($"{prompt}: ");
+        Console.ResetColor();
+        Console.ForegroundColor = ConsoleColor.Green;
+
+        var buffer = new List<char>();
+        while (true)
+        {
+            var key = Console.ReadKey(true);
+            if (key.Key == ConsoleKey.Enter)
+            {
+                Console.ResetColor();
+                Console.WriteLine();
+                return new string(buffer.ToArray());
+            }
+            else if (key.Key == ConsoleKey.Backspace)
+            {
+                if (buffer.Count > 0)
+                {
+                    buffer.RemoveAt(buffer.Count - 1);
+                    Console.Write("\b \b");
+                }
+            }
+            else if (key.KeyChar >= ' ')
+            {
+                buffer.Add(key.KeyChar);
+                Console.Write('*');
+            }
+        }
     }
 }

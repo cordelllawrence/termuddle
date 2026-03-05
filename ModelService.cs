@@ -1,31 +1,34 @@
+using System.Net.Http.Headers;
 using System.Text.Json;
 
 namespace tuichat;
 
-public class OllamaService
+public class ModelService
 {
     private readonly HttpClient _http;
 
-    public OllamaService(string baseUrl)
+    public ModelService(string baseUrl, string apiKey = "")
     {
         _http = new HttpClient { BaseAddress = new Uri(baseUrl) };
-        _http.Timeout = TimeSpan.FromSeconds(5);
+        _http.Timeout = TimeSpan.FromSeconds(10);
+        if (!string.IsNullOrEmpty(apiKey))
+            _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
     }
 
     public async Task<List<string>> ListModelsAsync()
     {
-        var response = await _http.GetAsync("/api/tags");
+        var response = await _http.GetAsync("/v1/models");
         response.EnsureSuccessStatusCode();
 
         using var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
         var models = new List<string>();
 
-        if (doc.RootElement.TryGetProperty("models", out var modelsArray))
+        if (doc.RootElement.TryGetProperty("data", out var dataArray))
         {
-            foreach (var model in modelsArray.EnumerateArray())
+            foreach (var model in dataArray.EnumerateArray())
             {
-                if (model.TryGetProperty("name", out var name))
-                    models.Add(name.GetString()!);
+                if (model.TryGetProperty("id", out var id))
+                    models.Add(id.GetString()!);
             }
         }
 

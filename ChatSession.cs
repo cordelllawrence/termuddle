@@ -5,22 +5,26 @@ namespace tuichat;
 
 public class ChatSession
 {
-    public string OllamaHost { get; set; } = "localhost";
+    public string BaseUrl { get; set; } = "http://localhost:11434/v1";
+    public string ApiKey { get; set; } = "";
     public string ModelName { get; set; } = "";
     public bool StreamResponses { get; set; } = true;
+    public bool ShowTps { get; set; } = false;
     public IChatClient ChatClient { get; set; } = null!;
     public List<ChatMessage> History { get; } = new();
     public Preferences Preferences { get; set; } = new();
 
     public void Reconnect()
     {
-        ChatClient = CreateChatClient(OllamaHost, ModelName);
+        ChatClient = CreateChatClient(BaseUrl, ApiKey, ModelName);
     }
 
-    public static IChatClient CreateChatClient(string host, string model)
+    public static IChatClient CreateChatClient(string baseUrl, string apiKey, string model)
     {
-        var endpoint = new Uri($"http://{host}:11434/v1");
-        var client = new OpenAIClient(new System.ClientModel.ApiKeyCredential("ollama"), new OpenAI.OpenAIClientOptions
+        var endpoint = new Uri(baseUrl);
+        var credential = new System.ClientModel.ApiKeyCredential(
+            string.IsNullOrEmpty(apiKey) ? "no-key" : apiKey);
+        var client = new OpenAIClient(credential, new OpenAI.OpenAIClientOptions
         {
             Endpoint = endpoint
         });

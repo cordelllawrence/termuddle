@@ -4,9 +4,11 @@ namespace tuichat;
 
 public class Preferences
 {
-    public string OllamaHost { get; set; } = "localhost";
+    public string BaseUrl { get; set; } = "http://localhost:11434/v1";
+    public string ApiKey { get; set; } = "";
     public string Model { get; set; } = "";
     public bool StreamResponses { get; set; } = true;
+    public bool ShowTps { get; set; } = false;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

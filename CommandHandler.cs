@@ -21,30 +21,41 @@ public static class CommandHandler
             case "/info":
                 int sent = session.History.Count(m => m.Role == ChatRole.User);
                 int received = session.History.Count(m => m.Role == ChatRole.Assistant);
-                ConsoleHelper.WriteInfo($"Host:               {session.OllamaHost}");
+                ConsoleHelper.WriteInfo($"Base URL:           {session.BaseUrl}");
+                ConsoleHelper.WriteInfo($"API Key:            {MaskApiKey(session.ApiKey)}");
                 ConsoleHelper.WriteInfo($"Model:              {session.ModelName}");
                 ConsoleHelper.WriteInfo($"Streaming:          {(session.StreamResponses ? "on" : "off")}");
+                ConsoleHelper.WriteInfo($"Show TPS:           {(session.ShowTps ? "on" : "off")}");
                 ConsoleHelper.WriteInfo($"Messages sent:      {sent}");
                 ConsoleHelper.WriteInfo($"Messages received:  {received}");
                 break;
 
             case "/help":
+            case "/?":
                 ConsoleHelper.WriteInfo("Available commands:");
                 ConsoleHelper.WriteInfo("  /bye                              - Exit the application");
                 ConsoleHelper.WriteInfo("  /info                             - Show session information");
                 ConsoleHelper.WriteInfo("  /help                             - Show this help message");
                 ConsoleHelper.WriteInfo("  /clear                            - Clear conversation history");
                 ConsoleHelper.WriteInfo("  /stream                           - Toggle streaming responses on/off");
-                ConsoleHelper.WriteInfo("  /models                           - List available Ollama models");
+                ConsoleHelper.WriteInfo("  /tps                              - Toggle tokens per second display on/off");
+                ConsoleHelper.WriteInfo("  /models                           - List available models");
                 ConsoleHelper.WriteInfo("  /switch <model|number>            - Switch to a different model (name, number, or partial match)");
                 ConsoleHelper.WriteInfo("  /preferences show                 - Show current preferences");
                 ConsoleHelper.WriteInfo("  /preferences set <key>=<value>    - Update a preference");
-                ConsoleHelper.WriteInfo("    Keys: ollama.host, ollama.model, ollama.stream");
+                ConsoleHelper.WriteInfo("    Keys: base_url, api_key, model, stream, tps");
                 break;
 
             case "/stream":
                 session.StreamResponses = !session.StreamResponses;
                 ConsoleHelper.WriteSystem($"Streaming is now {(session.StreamResponses ? "on" : "off")}.");
+                break;
+
+            case "/tps":
+                session.ShowTps = !session.ShowTps;
+                session.Preferences.ShowTps = session.ShowTps;
+                session.Preferences.Save();
+                ConsoleHelper.WriteSystem($"Tokens per second display is now {(session.ShowTps ? "on" : "off")}.");
                 break;
 
             case "/clear":
@@ -76,12 +87,13 @@ public static class CommandHandler
     {
         try
         {
-            var service = new OllamaService($"http://{session.OllamaHost}:11434");
+            var origin = new Uri(session.BaseUrl).GetLeftPart(UriPartial.Authority);
+            var service = new ModelService(origin, session.ApiKey);
             var models = await service.ListModelsAsync();
 
             if (models.Count == 0)
             {
-                ConsoleHelper.WriteInfo("No models found. Pull a model with: ollama pull <model>");
+                ConsoleHelper.WriteInfo("No models found on this server.");
                 return;
             }
 
@@ -110,7 +122,8 @@ public static class CommandHandler
 
         try
         {
-            var service = new OllamaService($"http://{session.OllamaHost}:11434");
+            var origin = new Uri(session.BaseUrl).GetLeftPart(UriPartial.Authority);
+            var service = new ModelService(origin, session.ApiKey);
             var models = await service.ListModelsAsync();
 
             string? resolved = null;
@@ -175,9 +188,11 @@ public static class CommandHandler
         switch (subCommand)
         {
             case "show":
-                ConsoleHelper.WriteInfo($"ollama.host   = {session.Preferences.OllamaHost}");
-                ConsoleHelper.WriteInfo($"ollama.model  = {session.Preferences.Model}");
-                ConsoleHelper.WriteInfo($"ollama.stream = {session.Preferences.StreamResponses.ToString().ToLowerInvariant()}");
+                ConsoleHelper.WriteInfo($"base_url  = {session.Preferences.BaseUrl}");
+                ConsoleHelper.WriteInfo($"api_key   = {MaskApiKey(session.Preferences.ApiKey)}");
+                ConsoleHelper.WriteInfo($"model     = {session.Preferences.Model}");
+                ConsoleHelper.WriteInfo($"stream    = {session.Preferences.StreamResponses.ToString().ToLowerInvariant()}");
+                ConsoleHelper.WriteInfo($"tps       = {session.Preferences.ShowTps.ToString().ToLowerInvariant()}");
                 ConsoleHelper.WriteInfo($"File: {Preferences.DefaultPath}");
                 break;
 
@@ -185,7 +200,7 @@ public static class CommandHandler
                 if (parts.Length < 3 || !parts[2].Contains('='))
                 {
                     ConsoleHelper.WriteError("Usage: /preferences set <key>=<value>");
-                    ConsoleHelper.WriteError("  Keys: ollama.host, ollama.model, ollama.stream");
+                    ConsoleHelper.WriteError("  Keys: base_url, api_key, model, stream, tps");
                     return;
                 }
 
@@ -195,15 +210,23 @@ public static class CommandHandler
 
                 switch (key)
                 {
-                    case "ollama.host":
-                        session.Preferences.OllamaHost = value;
-                        session.OllamaHost = value;
+                    case "base_url":
+                        session.Preferences.BaseUrl = value;
+                        session.BaseUrl = value;
                         session.Reconnect();
                         session.Preferences.Save();
-                        ConsoleHelper.WriteSystem($"Host updated to: {value} (reconnected)");
+                        ConsoleHelper.WriteSystem($"Base URL updated to: {value} (reconnected)");
                         break;
 
-                    case "ollama.model":
+                    case "api_key":
+                        session.Preferences.ApiKey = value;
+                        session.ApiKey = value;
+                        session.Reconnect();
+                        session.Preferences.Save();
+                        ConsoleHelper.WriteSystem("API key updated (reconnected)");
+                        break;
+
+                    case "model":
                         session.Preferences.Model = value;
                         session.ModelName = value;
                         session.Reconnect();
@@ -211,7 +234,7 @@ public static class CommandHandler
                         ConsoleHelper.WriteSystem($"Default model updated to: {value} (switched)");
                         break;
 
-                    case "ollama.stream":
+                    case "stream":
                         if (bool.TryParse(value, out var streamVal))
                         {
                             session.Preferences.StreamResponses = streamVal;
@@ -225,9 +248,23 @@ public static class CommandHandler
                         }
                         break;
 
+                    case "tps":
+                        if (bool.TryParse(value, out var tpsVal))
+                        {
+                            session.Preferences.ShowTps = tpsVal;
+                            session.ShowTps = tpsVal;
+                            session.Preferences.Save();
+                            ConsoleHelper.WriteSystem($"Show TPS updated to: {(tpsVal ? "on" : "off")}");
+                        }
+                        else
+                        {
+                            ConsoleHelper.WriteError("Invalid value. Use true or false.");
+                        }
+                        break;
+
                     default:
                         ConsoleHelper.WriteError($"Unknown preference key: {key}");
-                        ConsoleHelper.WriteError("  Keys: ollama.host, ollama.model, ollama.stream");
+                        ConsoleHelper.WriteError("  Keys: base_url, api_key, model, stream, tps");
                         break;
                 }
                 break;
@@ -236,5 +273,14 @@ public static class CommandHandler
                 ConsoleHelper.WriteError("Usage: /preferences show | /preferences set <key>=<value>");
                 break;
         }
+    }
+
+    private static string MaskApiKey(string apiKey)
+    {
+        if (string.IsNullOrEmpty(apiKey))
+            return "(not set)";
+        if (apiKey.Length <= 8)
+            return new string('*', apiKey.Length);
+        return apiKey[..4] + new string('*', apiKey.Length - 8) + apiKey[^4..];
     }
 }

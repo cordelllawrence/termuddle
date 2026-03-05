@@ -6,22 +6,31 @@ var prefs = Preferences.Load();
 
 if (prefs is not null)
 {
-    ConsoleHelper.WriteSystem($"Loaded preferences: host={prefs.OllamaHost}, model={prefs.Model}");
+    ConsoleHelper.WriteSystem($"Loaded preferences: {prefs.BaseUrl}, model={prefs.Model}");
 }
 else
 {
     ConsoleHelper.WriteSystem("Welcome to tuichat! Let's set things up.");
     Console.WriteLine();
 
-    // Ask for Ollama host
-    var envHost = Environment.GetEnvironmentVariable("OLLAMA_HOST");
-    var defaultHost = envHost ?? "localhost";
-    var host = ConsoleHelper.ReadInputDefault("Ollama host", defaultHost);
+    // Ask for base URL
+    var defaultUrl = "http://localhost:11434/v1";
+    ConsoleHelper.WriteInfo("Enter the base URL for your API provider.");
+    ConsoleHelper.WriteInfo("Examples:");
+    ConsoleHelper.WriteInfo("  Ollama:    http://localhost:11434/v1");
+    ConsoleHelper.WriteInfo("  OpenAI:    https://api.openai.com/v1");
+    ConsoleHelper.WriteInfo("  LM Studio: http://localhost:1234/v1");
+    var baseUrl = ConsoleHelper.ReadInputDefault("Base URL", defaultUrl);
+
+    // Ask for API key (optional)
+    ConsoleHelper.WriteInfo("Enter your API key (leave blank if not required, e.g. Ollama).");
+    var apiKey = ConsoleHelper.ReadInputMasked("API key");
 
     // Connect and list models
-    var service = new OllamaService($"http://{host}:11434");
+    // Extract the origin (scheme + host + port) from the base URL for the model service
+    var service = new ModelService(new Uri(baseUrl).GetLeftPart(UriPartial.Authority), apiKey);
 
-    ConsoleHelper.WriteSystem($"Connecting to Ollama at {host}...");
+    ConsoleHelper.WriteSystem($"Connecting to {baseUrl}...");
     List<string> models;
     try
     {
@@ -29,14 +38,14 @@ else
     }
     catch (Exception ex)
     {
-        ConsoleHelper.WriteError($"Failed to connect to Ollama at {host}: {ex.Message}");
-        ConsoleHelper.WriteError("Make sure Ollama is running and accessible.");
+        ConsoleHelper.WriteError($"Failed to connect to {baseUrl}: {ex.Message}");
+        ConsoleHelper.WriteError("Check the URL and ensure the server is running.");
         return 1;
     }
 
     if (models.Count == 0)
     {
-        ConsoleHelper.WriteError("No models found. Pull a model first with: ollama pull <model>");
+        ConsoleHelper.WriteError("No models found on this server.");
         return 1;
     }
 
@@ -57,7 +66,8 @@ else
 
     prefs = new Preferences
     {
-        OllamaHost = host,
+        BaseUrl = baseUrl,
+        ApiKey = apiKey,
         Model = selectedModel
     };
     prefs.Save();
@@ -65,15 +75,14 @@ else
     Console.WriteLine();
 }
 
-// --- OLLAMA_HOST env var overrides preferences ---
-var ollamaHost = Environment.GetEnvironmentVariable("OLLAMA_HOST") ?? prefs.OllamaHost;
-
 // --- Build Session ---
 var session = new ChatSession
 {
-    OllamaHost = ollamaHost,
+    BaseUrl = prefs.BaseUrl,
+    ApiKey = prefs.ApiKey,
     ModelName = prefs.Model,
     StreamResponses = prefs.StreamResponses,
+    ShowTps = prefs.ShowTps,
     Preferences = prefs
 };
 session.Reconnect();
@@ -89,9 +98,8 @@ Console.CancelKeyPress += (_, e) =>
 // --- Startup Banner ---
 ConsoleHelper.WriteSystem("╔══════════════════════════════════════╗");
 ConsoleHelper.WriteSystem("║            tuichat                   ║");
-ConsoleHelper.WriteSystem("║  Terminal Chat powered by Ollama     ║");
 ConsoleHelper.WriteSystem("╚══════════════════════════════════════╝");
-ConsoleHelper.WriteSystem($"Host: {session.OllamaHost} | Model: {session.ModelName}");
+ConsoleHelper.WriteSystem($"API: {session.BaseUrl} | Model: {session.ModelName}");
 ConsoleHelper.WriteSystem("Type /help for commands, /bye to exit.");
 ConsoleHelper.WriteSystem("Use \\ at end of line for multi-line input.");
 Console.WriteLine();
@@ -117,11 +125,14 @@ while (true)
         continue;
     }
 
-    // Send to Ollama
+    // Send to LLM
     session.History.Add(new ChatMessage(ChatRole.User, input));
 
     try
     {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        int tokenCount = 0;
+
         if (session.StreamResponses)
         {
             Console.ForegroundColor = ConsoleColor.Cyan;
@@ -131,6 +142,7 @@ while (true)
                 var chunk = update.Text ?? string.Empty;
                 Console.Write(chunk);
                 fullResponse.Append(chunk);
+                tokenCount++;
             }
             Console.ResetColor();
             Console.WriteLine();
@@ -144,6 +156,7 @@ while (true)
 
             var response = await session.ChatClient.GetResponseAsync(session.History);
             var responseText = response.Text ?? string.Empty;
+            tokenCount = responseText.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
 
             // Clear the "Thinking..." text
             Console.Write("\r            \r");
@@ -151,6 +164,14 @@ while (true)
 
             ConsoleHelper.WriteResponse(responseText);
             session.History.Add(new ChatMessage(ChatRole.Assistant, responseText));
+        }
+
+        stopwatch.Stop();
+        if (session.ShowTps && tokenCount > 0)
+        {
+            var elapsed = stopwatch.Elapsed.TotalSeconds;
+            var tps = elapsed > 0 ? tokenCount / elapsed : 0;
+            ConsoleHelper.WriteInfo($"[{tokenCount} tokens in {elapsed:F1}s — {tps:F1} tokens/sec]");
         }
     }
     catch (Exception ex)
