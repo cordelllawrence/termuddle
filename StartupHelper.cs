@@ -13,12 +13,80 @@ public static class StartupHelper
         var config = ConfigHelper.Load();
 
         if (config is not null)
-            return ApplyCliOverrides(config, cli);
+        {
+            config = ApplyCliOverrides(config, cli);
+            if (!await ValidateServerAsync(config))
+                return null;
+            return config;
+        }
 
         if (cli.BaseUrl is not null && cli.Model is not null)
-            return FromCliOptions(cli);
+        {
+            config = FromCliOptions(cli);
+            if (!await ValidateServerAsync(config))
+                return null;
+            return config;
+        }
 
         return await RunSetupWizardAsync();
+    }
+
+    /// <summary>
+    /// Validates that the configured server is reachable and the model is available.
+    /// If the model is not found, lists available models and prompts the user to choose one.
+    /// Returns true if validation succeeded, false if the server is unreachable or user cancels.
+    /// </summary>
+    public static async Task<bool> ValidateServerAsync(ConfigHelper config)
+    {
+        var origin = new Uri(config.BaseUrl).GetLeftPart(UriPartial.Authority);
+        using var service = new ModelService(origin, config.ApiKey);
+
+        ConsoleHelper.WriteSystem($"Connecting to {config.BaseUrl}...");
+
+        List<string> models;
+        try
+        {
+            models = await service.ListModelsAsync();
+        }
+        catch (Exception ex)
+        {
+            ConsoleHelper.WriteError($"Cannot reach server at {config.BaseUrl}: {ex.Message}");
+            ConsoleHelper.WriteError("Check the URL and ensure the server is running.");
+            return false;
+        }
+
+        if (models.Count == 0)
+        {
+            ConsoleHelper.WriteError("Server is reachable but no models are available.");
+            return false;
+        }
+
+        if (models.Contains(config.Model))
+        {
+            ConsoleHelper.WriteSystem($"Ready! Server is reachable and model '{config.Model}' is available.");
+            return true;
+        }
+
+        ConsoleHelper.WriteError($"Model '{config.Model}' is not available on this server.");
+        ConsoleHelper.WriteInfo("Available models:");
+        for (int i = 0; i < models.Count; i++)
+            ConsoleHelper.WriteInfo($"  {i + 1}. {models[i]}");
+
+        Console.WriteLine();
+        var choice = ConsoleHelper.ReadInputDefault("Select a model number (or press Enter to cancel)", "");
+        if (string.IsNullOrWhiteSpace(choice))
+            return false;
+
+        if (!int.TryParse(choice, out var index) || index < 1 || index > models.Count)
+        {
+            ConsoleHelper.WriteError("Invalid selection.");
+            return false;
+        }
+
+        config.Model = models[index - 1];
+        config.Save();
+        ConsoleHelper.WriteSystem($"Model updated to '{config.Model}'. Ready!");
+        return true;
     }
 
     private static ConfigHelper ApplyCliOverrides(ConfigHelper config, CliOptions cli)

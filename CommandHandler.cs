@@ -61,11 +61,11 @@ public static class CommandHandler
                 break;
 
             case "/config":
-                HandleConfig(parts, session);
+                await HandleConfigAsync(parts, session);
                 break;
 
             case "/backup":
-                HandleBackup(parts, session);
+                await HandleBackupAsync(parts, session);
                 break;
 
             default:
@@ -223,7 +223,7 @@ public static class CommandHandler
 
     // --- /config ---
 
-    private static void HandleConfig(string[] parts, ChatSession session)
+    private static async Task HandleConfigAsync(string[] parts, ChatSession session)
     {
         var sub = parts.Length >= 2 ? parts[1].ToLowerInvariant() : "show";
 
@@ -233,10 +233,10 @@ public static class CommandHandler
                 HandleConfigShow(session);
                 break;
             case "set":
-                HandleConfigSet(parts, session);
+                await HandleConfigSetAsync(parts, session);
                 break;
             case "reset":
-                HandleConfigReset(session);
+                await HandleConfigResetAsync(session);
                 break;
             default:
                 ConsoleHelper.WriteError("Usage: /config show | set <key>=<value> | reset");
@@ -254,7 +254,7 @@ public static class CommandHandler
         ConsoleHelper.WriteInfo($"File: {ConfigHelper.DefaultPath}");
     }
 
-    private static void HandleConfigSet(string[] parts, ChatSession session)
+    private static async Task HandleConfigSetAsync(string[] parts, ChatSession session)
     {
         if (parts.Length < 3 || !parts[2].Contains('='))
         {
@@ -272,10 +272,18 @@ public static class CommandHandler
             case "base_url":
                 try
                 {
+                    var previousUrl = session.BaseUrl;
                     session.BaseUrl = value;
-                    session.Reconnect();
-                    session.Preferences.Save();
-                    ConsoleHelper.WriteSystem($"Base URL updated to: {value} (reconnected)");
+                    if (await StartupHelper.ValidateServerAsync(session.Preferences))
+                    {
+                        session.Reconnect();
+                        session.Preferences.Save();
+                    }
+                    else
+                    {
+                        session.BaseUrl = previousUrl;
+                        ConsoleHelper.WriteSystem("Base URL change reverted.");
+                    }
                 }
                 catch (UriFormatException)
                 {
@@ -290,10 +298,18 @@ public static class CommandHandler
             case "api_key":
                 try
                 {
+                    var previousKey = session.ApiKey;
                     session.ApiKey = value;
-                    session.Reconnect();
-                    session.Preferences.Save();
-                    ConsoleHelper.WriteSystem("API key updated (reconnected)");
+                    if (await StartupHelper.ValidateServerAsync(session.Preferences))
+                    {
+                        session.Reconnect();
+                        session.Preferences.Save();
+                    }
+                    else
+                    {
+                        session.ApiKey = previousKey;
+                        ConsoleHelper.WriteSystem("API key change reverted.");
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -304,10 +320,18 @@ public static class CommandHandler
             case "model":
                 try
                 {
+                    var previousModel = session.ModelName;
                     session.ModelName = value;
-                    session.Reconnect();
-                    session.Preferences.Save();
-                    ConsoleHelper.WriteSystem($"Default model updated to: {value} (switched)");
+                    if (await StartupHelper.ValidateServerAsync(session.Preferences))
+                    {
+                        session.Reconnect();
+                        session.Preferences.Save();
+                    }
+                    else
+                    {
+                        session.ModelName = previousModel;
+                        ConsoleHelper.WriteSystem("Model change reverted.");
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -348,7 +372,7 @@ public static class CommandHandler
         }
     }
 
-    private static void HandleConfigReset(ChatSession session)
+    private static async Task HandleConfigResetAsync(ChatSession session)
     {
         var loaded = ConfigHelper.Load();
         if (loaded is null)
@@ -357,14 +381,21 @@ public static class CommandHandler
             return;
         }
 
-        session.Preferences = loaded;
-        session.Reconnect();
-        ConsoleHelper.WriteSystem("Config reloaded from disk and reconnected.");
+        if (await StartupHelper.ValidateServerAsync(loaded))
+        {
+            session.Preferences = loaded;
+            session.Reconnect();
+            ConsoleHelper.WriteSystem("Config reloaded from disk and reconnected.");
+        }
+        else
+        {
+            ConsoleHelper.WriteSystem("Config reset cancelled — keeping current settings.");
+        }
     }
 
     // --- /backup ---
 
-    private static void HandleBackup(string[] parts, ChatSession session)
+    private static async Task HandleBackupAsync(string[] parts, ChatSession session)
     {
         var sub = parts.Length >= 2 ? parts[1].ToLowerInvariant() : null;
 
@@ -384,7 +415,7 @@ public static class CommandHandler
                 break;
             case "load":
             case "restore":
-                HandleBackupLoad(parts, session);
+                await HandleBackupLoadAsync(parts, session);
                 break;
             case "remove":
             case "delete":
@@ -415,7 +446,7 @@ public static class CommandHandler
         }
     }
 
-    private static void HandleBackupLoad(string[] parts, ChatSession session)
+    private static async Task HandleBackupLoadAsync(string[] parts, ChatSession session)
     {
         if (parts.Length < 3 || !int.TryParse(parts[2], out var loadIndex))
         {
@@ -427,6 +458,12 @@ public static class CommandHandler
         if (loaded is null)
         {
             ConsoleHelper.WriteError($"Backup #{loadIndex} not found. Use /backup list to see available backups.");
+            return;
+        }
+
+        if (!await StartupHelper.ValidateServerAsync(loaded))
+        {
+            ConsoleHelper.WriteSystem("Backup restore cancelled — keeping current settings.");
             return;
         }
 
