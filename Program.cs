@@ -5,6 +5,8 @@ using Serilog;
 using Spectre.Console;
 using termuddle;
 
+Console.OutputEncoding = System.Text.Encoding.UTF8;
+
 // --- Configure Serilog file logger ---
 var logPath = Path.Combine(AppContext.BaseDirectory, "logs", "termuddle-.log");
 Log.Logger = new LoggerConfiguration()
