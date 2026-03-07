@@ -16,20 +16,23 @@ public static class ConsoleHelper
 
     private static readonly string[] _goodbyeMessages =
     [
-        "Later, nerd.",
+        "Later dude.",
         "May your bugs be few and your commits be clean.",
         "Don't forget to touch grass.",
         "This conversation will self-destruct in 3... 2... just kidding.",
         "Go hydrate, you beautiful developer.",
+        "Luke ... I am your father.",
         "See you next time, same terminal, same channel.",
         "Remember: it's not a bug, it's a feature.",
         "You've been terminated... from this session.",
         "Until next time, happy hacking!",
         "Goodbye! Thanks for chatting.",
         "Peace out, code warrior.",
+        "Winter is coming...",
         "May your tests always pass on the first try.",
         "Off you go. The terminal will miss you.",
-        "Attack pattern Shinzon Theta!"
+        "Attack pattern Shinzon Theta!",
+        "There is no spoon."
     ];
 
     public static string GetRandomGoodbye()

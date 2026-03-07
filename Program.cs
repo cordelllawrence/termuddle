@@ -28,7 +28,9 @@ TaskScheduler.UnobservedTaskException += (_, e) =>
     e.SetObserved();
 };
 
-CoconaApp.Run(async (
+var coconaBuilder = CoconaApp.CreateBuilder();
+var coconaApp = coconaBuilder.Build();
+coconaApp.AddCommand(async (
     [Option("base-url", Description = "Base URL for the API provider (e.g. http://localhost:11434/v1)")] string? baseUrl,
     [Option("api-key", Description = "API key for authentication")] string? apiKey,
     [Option("model", Description = "Model name to use")] string? model,
@@ -60,7 +62,7 @@ CoconaApp.Run(async (
 
     // --- Startup Banner ---
     AnsiConsole.Write(
-        new Panel($"[yellow]API:[/] {Markup.Escape(session.BaseUrl)} | [yellow]Model:[/] {Markup.Escape(session.ModelName)}\nType /help for commands, /bye to exit.\nUse \\ at end of line for multi-line input.")
+        new Panel($"[yellow]API:[/] {Markup.Escape(session.BaseUrl)} | [yellow]Model:[/] {Markup.Escape(session.ModelName)}\nType /help for commands, /bye to exit.")
             .Header("[yellow bold]termuddle[/]")
             .BorderColor(Color.Yellow)
             .Padding(1, 0));
@@ -164,7 +166,8 @@ CoconaApp.Run(async (
             ConsoleHelper.WriteError($"Error: {ex.Message}");
         }
     }
-});
+}).WithDescription("A tool that allows you to quickly connect to and interact with LLM servers that support the OpenAI v1 API.");
+coconaApp.Run();
 
 static int EstimateWordCount(string text)
     => text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
