@@ -49,8 +49,18 @@ On first run without a config file, termuddle walks you through a setup wizard t
 | `--model` | Model name to use |
 | `--stream` | Enable streaming responses |
 | `--tps` | Show tokens-per-second stats |
+| `--ask <question>` | Ask a single question and exit (pipe-friendly) |
 
 CLI options override saved config values for that session and are persisted.
+
+### Quick Question Mode
+
+Use `--ask` to send a single question, print the response to stdout, and exit — useful for scripts and pipelines:
+
+```bash
+dotnet run -- --ask "What is the capital of France?"
+dotnet run -- --model llama3 --ask "Summarize this error" < error.log
+```
 
 ## Commands
 

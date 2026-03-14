@@ -35,7 +35,27 @@ dotnet run -- --base-url http://localhost:1234/v1 --model my-model
 
 # Enable streaming and TPS display
 dotnet run -- --base-url http://localhost:11434/v1 --model llama3 --stream --tps
+
+# Ask a single question and exit (no interactive session)
+dotnet run -- --ask "What is the capital of France?"
+
+# Combine with other options
+dotnet run -- --model llama3 --ask "Explain recursion in one sentence"
 ```
+
+### Quick Question Mode
+
+The `--ask` option sends a single question to the model, prints the response to stdout, and exits immediately — no interactive session is started. This makes termuddle scriptable and pipe-friendly:
+
+```bash
+# Use in a pipeline
+dotnet run -- --ask "Summarize this error" < error.log
+
+# Capture output
+ANSWER=$(dotnet run -- --ask "What is 2 + 2?")
+```
+
+Output goes to plain stdout (no colors or formatting), and errors go to stderr with a non-zero exit code.
 
 ## Chatting
 
