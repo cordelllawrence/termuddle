@@ -21,6 +21,10 @@ var logger = loggerFactory.CreateLogger("termuddle");
 AppDomain.CurrentDomain.UnhandledException += (_, e) =>
 {
     Log.Fatal(e.ExceptionObject as Exception, "Unhandled exception");
+    try { TerminalLayout.ResetLayout(); } catch { /* best-effort */ }
+    Console.ResetColor();
+    Console.Error.WriteLine($"Fatal error: {(e.ExceptionObject as Exception)?.Message ?? "Unknown error"}");
+    Console.Error.WriteLine("Details have been written to the log file.");
     Log.CloseAndFlush();
 };
 
@@ -108,12 +112,23 @@ coconaApp.AddCommand(async (
     // --- REPL Loop ---
     while (true)
     {
-        ConsoleHelper.EnsureCursorVisible();
-        ConsoleHelper.WritePrompt("> ");
+        string input;
+        try
+        {
+            ConsoleHelper.EnsureCursorVisible();
+            ConsoleHelper.WritePrompt("> ");
 
-        // Read input (with multi-line support via trailing \)
-        var input = ReadMultiLineInput();
-        TerminalLayout.ClearInputArea();
+            // Read input (with multi-line support via trailing \)
+            input = ReadMultiLineInput();
+            TerminalLayout.ClearInputArea();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error reading input");
+            // Attempt to recover the terminal layout
+            try { TerminalLayout.HandleResize(); } catch { /* best-effort */ }
+            continue;
+        }
 
         if (string.IsNullOrWhiteSpace(input))
             continue;

@@ -49,7 +49,7 @@ public static class ConsoleHelper
         lock (_consoleLock)
         {
             Console.Write("\e7");
-            Console.SetCursorPosition(0, spinnerRow);
+            SafeSetCursorPosition(0, spinnerRow);
             Console.WriteLine();
             Console.Write("\e8");
             Console.CursorVisible = false;
@@ -64,7 +64,7 @@ public static class ConsoleHelper
                 lock (_consoleLock)
                 {
                     var frame = _spinnerFrames[frameIndex % _spinnerFrames.Length];
-                    Console.SetCursorPosition(0, spinnerRow);
+                    SafeSetCursorPosition(0, spinnerRow);
                     Console.ForegroundColor = ConsoleColor.Cyan;
                     Console.Write($" {frame} Thinking...");
                     Console.ResetColor();
@@ -83,7 +83,7 @@ public static class ConsoleHelper
             // Clear the spinner line
             lock (_consoleLock)
             {
-                Console.SetCursorPosition(0, spinnerRow);
+                SafeSetCursorPosition(0, spinnerRow);
                 Console.Write(new string(' ', Console.WindowWidth));
             }
         }, ct);
@@ -174,6 +174,17 @@ public static class ConsoleHelper
     public static void EnsureCursorVisible()
     {
         Console.CursorVisible = true;
+    }
+
+    /// <summary>
+    /// Safely set cursor position, clamping to valid terminal bounds to avoid
+    /// ArgumentOutOfRangeException crashes.
+    /// </summary>
+    private static void SafeSetCursorPosition(int left, int top)
+    {
+        left = Math.Clamp(left, 0, Math.Max(0, Console.WindowWidth - 1));
+        top = Math.Clamp(top, 0, Math.Max(0, Console.WindowHeight - 1));
+        Console.SetCursorPosition(left, top);
     }
 
     public static string ReadInput()
@@ -282,13 +293,15 @@ public static class ConsoleHelper
             width = Console.WindowWidth;
             firstLineCap = Math.Max(1, width - promptLen);
 
-            var lineCount = GetLineCount();
-            TerminalLayout.UpdateInputHeight(lineCount);
+            var rawLineCount = GetLineCount();
+            TerminalLayout.UpdateInputHeight(rawLineCount);
+            // Use the capped line count from the layout to avoid drawing beyond terminal bounds
+            var lineCount = TerminalLayout.InputLineCount;
 
             var inputStart = TerminalLayout.InputStartRow;
 
             // Draw first line (after prompt)
-            Console.SetCursorPosition(promptLen, inputStart);
+            SafeSetCursorPosition(promptLen, inputStart);
             var firstChunk = Math.Min(firstLineCap, buffer.Count);
             if (firstChunk > 0)
                 Console.Write(new string(buffer.GetRange(0, firstChunk).ToArray()));
@@ -297,11 +310,11 @@ public static class ConsoleHelper
             if (clearFirst > 0)
                 Console.Write(new string(' ', clearFirst));
 
-            // Draw subsequent lines
+            // Draw subsequent lines (only up to the capped line count)
             var written = firstChunk;
             for (int line = 1; line < lineCount; line++)
             {
-                Console.SetCursorPosition(0, inputStart + line);
+                SafeSetCursorPosition(0, inputStart + line);
                 var chunk = Math.Min(width, buffer.Count - written);
                 if (chunk > 0)
                     Console.Write(new string(buffer.GetRange(written, chunk).ToArray()));
@@ -314,13 +327,17 @@ public static class ConsoleHelper
             // Clear any leftover rows from previous longer input
             for (int row = inputStart + lineCount; row < Console.WindowHeight; row++)
             {
-                Console.SetCursorPosition(0, row);
+                SafeSetCursorPosition(0, row);
                 Console.Write(new string(' ', width));
             }
 
+            // Clamp cursor position to displayable area
+            var maxDisplayable = firstLineCap + (lineCount - 1) * width;
+            var clampedCursorPos = Math.Min(cursorPos, maxDisplayable);
+
             // Position cursor
-            var (curCol, curRow) = CursorToPosition(cursorPos);
-            Console.SetCursorPosition(curCol, curRow);
+            var (curCol, curRow) = CursorToPosition(clampedCursorPos);
+            SafeSetCursorPosition(curCol, curRow);
         }
 
         void SetBufferContent(string text)
@@ -383,7 +400,7 @@ public static class ConsoleHelper
                     {
                         cursorPos--;
                         var (lc, lr) = CursorToPosition(cursorPos);
-                        Console.SetCursorPosition(lc, lr);
+                        SafeSetCursorPosition(lc, lr);
                     }
                     break;
 
@@ -393,21 +410,21 @@ public static class ConsoleHelper
                     {
                         cursorPos++;
                         var (rc, rr) = CursorToPosition(cursorPos);
-                        Console.SetCursorPosition(rc, rr);
+                        SafeSetCursorPosition(rc, rr);
                     }
                     break;
 
                 case ConsoleKey.Home:
                     tabMatches = null;
                     cursorPos = 0;
-                    Console.SetCursorPosition(promptLen, TerminalLayout.InputStartRow);
+                    SafeSetCursorPosition(promptLen, TerminalLayout.InputStartRow);
                     break;
 
                 case ConsoleKey.End:
                     tabMatches = null;
                     cursorPos = buffer.Count;
                     var (ec, er) = CursorToPosition(cursorPos);
-                    Console.SetCursorPosition(ec, er);
+                    SafeSetCursorPosition(ec, er);
                     break;
 
                 case ConsoleKey.UpArrow:
@@ -421,7 +438,7 @@ public static class ConsoleHelper
                         var targetPos = PositionToCursorPos(curCol, curRow - 1);
                         cursorPos = Math.Clamp(targetPos, 0, buffer.Count);
                         var (nc, nr) = CursorToPosition(cursorPos);
-                        Console.SetCursorPosition(nc, nr);
+                        SafeSetCursorPosition(nc, nr);
                     }
                     else if (_historyIndex > 0)
                     {
@@ -436,7 +453,7 @@ public static class ConsoleHelper
                 case ConsoleKey.DownArrow:
                 {
                     var (_, curRow) = CursorToPosition(cursorPos);
-                    var lastRow = TerminalLayout.InputStartRow + GetLineCount() - 1;
+                    var lastRow = TerminalLayout.InputStartRow + TerminalLayout.InputLineCount - 1;
                     if (curRow < lastRow)
                     {
                         // Move down one visual row within multiline input
@@ -444,7 +461,7 @@ public static class ConsoleHelper
                         var targetPos = PositionToCursorPos(curCol, curRow + 1);
                         cursorPos = Math.Clamp(targetPos, 0, buffer.Count);
                         var (nc, nr) = CursorToPosition(cursorPos);
-                        Console.SetCursorPosition(nc, nr);
+                        SafeSetCursorPosition(nc, nr);
                     }
                     else if (_historyIndex < _history.Count)
                     {

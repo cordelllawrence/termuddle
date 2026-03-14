@@ -7,6 +7,16 @@ public static class TerminalLayout
     private static int _lastWindowHeight;
     private static int _inputLineCount = 1;
 
+    /// <summary>
+    /// Safely set cursor position, clamping to valid terminal bounds.
+    /// </summary>
+    private static void SafeSetCursorPosition(int left, int top)
+    {
+        left = Math.Clamp(left, 0, Math.Max(0, Console.WindowWidth - 1));
+        top = Math.Clamp(top, 0, Math.Max(0, Console.WindowHeight - 1));
+        Console.SetCursorPosition(left, top);
+    }
+
     public static bool IsInitialized => _initialized;
 
     public static int InputLineCount => _inputLineCount;
@@ -31,14 +41,14 @@ public static class TerminalLayout
         RedrawSeparator();
 
         // Position cursor at input area
-        Console.SetCursorPosition(0, InputStartRow);
+        SafeSetCursorPosition(0, InputStartRow);
 
         _initialized = true;
     }
 
     public static void RedrawSeparator()
     {
-        Console.SetCursorPosition(0, SeparatorRow);
+        SafeSetCursorPosition(0, SeparatorRow);
         Console.ForegroundColor = ConsoleColor.DarkGray;
         Console.Write(new string('─', Console.WindowWidth));
         Console.ResetColor();
@@ -56,7 +66,7 @@ public static class TerminalLayout
         Console.Write("\e7");
 
         // Move cursor to the bottom of the output scrolling region
-        Console.SetCursorPosition(0, OutputAreaHeight - 1);
+        SafeSetCursorPosition(0, OutputAreaHeight - 1);
 
         // Write a newline to scroll the region if needed, then the content
         Console.WriteLine();
@@ -75,7 +85,7 @@ public static class TerminalLayout
         }
 
         Console.Write("\e7");
-        Console.SetCursorPosition(0, OutputAreaHeight - 1);
+        SafeSetCursorPosition(0, OutputAreaHeight - 1);
         Console.WriteLine();
         Console.Write(text);
         Console.Write("\e8");
@@ -87,7 +97,7 @@ public static class TerminalLayout
 
         // Save cursor and move to output area for streaming
         Console.Write("\e7");
-        Console.SetCursorPosition(0, OutputAreaHeight - 1);
+        SafeSetCursorPosition(0, OutputAreaHeight - 1);
         Console.WriteLine();
     }
 
@@ -103,10 +113,10 @@ public static class TerminalLayout
     {
         for (int row = InputStartRow; row < Console.WindowHeight; row++)
         {
-            Console.SetCursorPosition(0, row);
+            SafeSetCursorPosition(0, row);
             Console.Write(new string(' ', Console.WindowWidth));
         }
-        Console.SetCursorPosition(0, InputStartRow);
+        SafeSetCursorPosition(0, InputStartRow);
     }
 
     /// <summary>
@@ -147,7 +157,7 @@ public static class TerminalLayout
             // Re-establish scrolling region
             Console.Write($"\e[1;{OutputAreaHeight}r");
             RedrawSeparator();
-            Console.SetCursorPosition(0, InputStartRow);
+            SafeSetCursorPosition(0, InputStartRow);
         }
     }
 
@@ -159,7 +169,7 @@ public static class TerminalLayout
         Console.Write("\e[r");
 
         // Move cursor to bottom
-        Console.SetCursorPosition(0, Console.WindowHeight - 1);
+        SafeSetCursorPosition(0, Console.WindowHeight - 1);
         Console.WriteLine();
 
         _inputLineCount = 1;
