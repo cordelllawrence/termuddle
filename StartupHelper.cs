@@ -1,6 +1,6 @@
 namespace termuddle;
 
-public record CliOptions(string? BaseUrl, string? ApiKey, string? Model, bool? Stream, bool? Tps);
+public record CliOptions(string? BaseUrl, string? ApiKey, string? Model, bool? Stream, bool? Tps, string? Ask);
 
 public static class StartupHelper
 {

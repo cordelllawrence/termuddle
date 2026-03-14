@@ -37,11 +37,12 @@ coconaApp.AddCommand(async (
     [Option("api-key", Description = "API key for authentication")] string? apiKey,
     [Option("model", Description = "Model name to use")] string? model,
     [Option("stream", Description = "Enable streaming responses")] bool? stream,
-    [Option("tps", Description = "Show tokens-per-second stats")] bool? tps
+    [Option("tps", Description = "Show tokens-per-second stats")] bool? tps,
+    [Option("ask", Description = "Ask a single question and exit")] string? ask
 ) =>
 {
     logger.LogInformation("termuddle starting");
-    var cli = new CliOptions(baseUrl, apiKey, model, stream, tps);
+    var cli = new CliOptions(baseUrl, apiKey, model, stream, tps, ask);
     var prefs = await StartupHelper.ResolveConfigAsync(cli);
 
     if (prefs is null)
@@ -50,6 +51,37 @@ coconaApp.AddCommand(async (
     // --- Build Session ---
     var session = new ChatSession { Preferences = prefs };
     session.Reconnect();
+
+    // --- Quick Ask Mode ---
+    if (cli.Ask is not null)
+    {
+        session.History.Add(new ChatMessage(ChatRole.User, cli.Ask));
+        try
+        {
+            if (session.StreamResponses)
+            {
+                await foreach (var update in session.ChatClient.GetStreamingResponseAsync(session.History, session.ChatOptions))
+                {
+                    var chunk = update.Text ?? string.Empty;
+                    if (chunk.Length > 0)
+                        Console.Write(chunk);
+                }
+                Console.WriteLine();
+            }
+            else
+            {
+                var response = await session.ChatClient.GetResponseAsync(session.History, session.ChatOptions);
+                Console.WriteLine(response.Text ?? string.Empty);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error during quick ask");
+            Console.Error.WriteLine($"Error: {ex.Message}");
+            return 1;
+        }
+        return 0;
+    }
 
     // --- Ctrl+C Handling ---
     Console.CancelKeyPress += (_, e) =>
