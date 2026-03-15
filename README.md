@@ -50,6 +50,8 @@ On first run without a config file, termuddle walks you through a setup wizard t
 | `--stream` | Enable streaming responses |
 | `--tps` | Show tokens-per-second stats |
 | `--ask <question>` | Ask a single question and exit (pipe-friendly) |
+| `--attach <file>` | Attach file(s) to the prompt (repeatable, use with `--ask`) |
+| `--no-tools` | Disable built-in tool use (web search, fetch, etc.) |
 
 CLI options override saved config values for that session and are persisted.
 
@@ -61,6 +63,26 @@ Use `--ask` to send a single question, print the response to stdout, and exit â€
 dotnet run -- --ask "What is the capital of France?"
 dotnet run -- --model llama3 --ask "Summarize this error" < error.log
 ```
+
+### File Attachments
+
+Use `--attach` with `--ask` to send files (images, text, etc.) to the model. Repeat the flag for multiple files:
+
+```bash
+# Describe an image (requires a vision-capable model)
+dotnet run -- --ask "What's in this photo?" --attach photo.jpg
+
+# Send multiple files
+dotnet run -- --ask "Compare these two images" --attach img1.png --attach img2.png
+
+# Attach a text file for analysis
+dotnet run -- --ask "Summarize this code" --attach src/main.cs
+
+# Use --no-tools if the model doesn't support tool use
+dotnet run -- --model gemma3:latest --ask "Describe this" --attach photo.jpg --no-tools
+```
+
+Images (jpg, png, gif, webp, bmp) are sent as binary data for vision models. Other file types are inlined as text.
 
 ## Commands
 

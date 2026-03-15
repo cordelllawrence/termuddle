@@ -42,11 +42,13 @@ coconaApp.AddCommand(async (
     [Option("model", Description = "Model name to use")] string? model,
     [Option("stream", Description = "Enable streaming responses")] bool? stream,
     [Option("tps", Description = "Show tokens-per-second stats")] bool? tps,
-    [Option("ask", Description = "Ask a single question and exit")] string? ask
+    [Option("ask", Description = "Ask a single question and exit")] string? ask,
+    [Option("attach", Description = "Attach file(s) to the prompt (use with --ask)")] string[]? attach,
+    [Option("no-tools", Description = "Disable tool use (web search, fetch, etc.)")] bool? noTools
 ) =>
 {
     logger.LogInformation("termuddle starting");
-    var cli = new CliOptions(baseUrl, apiKey, model, stream, tps, ask);
+    var cli = new CliOptions(baseUrl, apiKey, model, stream, tps, ask, attach, noTools);
     var prefs = await StartupHelper.ResolveConfigAsync(cli);
 
     if (prefs is null)
@@ -56,32 +58,55 @@ coconaApp.AddCommand(async (
     var session = new ChatSession { Preferences = prefs };
     session.Reconnect();
 
+    // --- Validate --attach requires --ask ---
+    if (cli.Attach is { Length: > 0 } && cli.Ask is null)
+    {
+        Console.Error.WriteLine("Error: --attach requires --ask to specify a prompt.");
+        return 1;
+    }
+
     // --- Quick Ask Mode ---
     if (cli.Ask is not null)
     {
-        session.History.Add(new ChatMessage(ChatRole.User, cli.Ask));
+        var askOptions = cli.NoTools == true ? new ChatOptions() : session.ChatOptions;
+
         try
         {
+            if (cli.Attach is { Length: > 0 })
+                session.History.Add(ChatSession.CreateMessageWithAttachments(cli.Ask, cli.Attach));
+            else
+                session.History.Add(new ChatMessage(ChatRole.User, cli.Ask));
+            var allContents = new List<AIContent>();
             if (session.StreamResponses)
             {
-                await foreach (var update in session.ChatClient.GetStreamingResponseAsync(session.History, session.ChatOptions))
+                await foreach (var update in session.ChatClient.GetStreamingResponseAsync(session.History, askOptions))
                 {
                     var chunk = update.Text ?? string.Empty;
                     if (chunk.Length > 0)
                         Console.Write(chunk);
+                    if (update.Contents is not null)
+                        allContents.AddRange(update.Contents);
                 }
                 Console.WriteLine();
             }
             else
             {
-                var response = await session.ChatClient.GetResponseAsync(session.History, session.ChatOptions);
+                var response = await session.ChatClient.GetResponseAsync(session.History, askOptions);
                 Console.WriteLine(response.Text ?? string.Empty);
+                foreach (var msg in response.Messages)
+                    allContents.AddRange(msg.Contents);
             }
+
+            var savedFiles = ChatSession.SaveResponseAttachments(allContents);
+            foreach (var file in savedFiles)
+                ConsoleHelper.WriteInfo($"Saved: {file}");
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error during quick ask");
             Console.Error.WriteLine($"Error: {ex.Message}");
+            if (cli.NoTools != true && ex.Message.Contains("tool", StringComparison.OrdinalIgnoreCase))
+                Console.Error.WriteLine("Hint: This model may not support tool use. Try adding --no-tools to disable built-in tools.");
             return 1;
         }
         return 0;
@@ -153,6 +178,7 @@ coconaApp.AddCommand(async (
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
             long? tokenCount = null;
 
+            var allContents = new List<AIContent>();
             if (session.StreamResponses)
             {
                 var fullResponse = new System.Text.StringBuilder();
@@ -163,6 +189,8 @@ coconaApp.AddCommand(async (
                 {
                     var chunk = update.Text ?? string.Empty;
                     lastUpdate = update;
+                    if (update.Contents is not null)
+                        allContents.AddRange(update.Contents);
                     if (chunk.Length == 0)
                         continue;
 
@@ -199,7 +227,13 @@ coconaApp.AddCommand(async (
 
                 ConsoleHelper.WriteResponse(responseText);
                 session.History.Add(new ChatMessage(ChatRole.Assistant, responseText));
+                foreach (var msg in response.Messages)
+                    allContents.AddRange(msg.Contents);
             }
+
+            var savedFiles = ChatSession.SaveResponseAttachments(allContents);
+            foreach (var file in savedFiles)
+                ConsoleHelper.WriteInfo($"Saved: {file}");
 
             stopwatch.Stop();
             if (session.ShowTps && tokenCount > 0)
@@ -213,6 +247,8 @@ coconaApp.AddCommand(async (
         {
             logger.LogError(ex, "Error during chat interaction");
             ConsoleHelper.WriteError($"Error: {ex.Message}");
+            if (ex.Message.Contains("tool", StringComparison.OrdinalIgnoreCase))
+                ConsoleHelper.WriteError("Hint: This model may not support tool use. Restart with --no-tools to disable built-in tools.");
         }
     }
 }).WithDescription("A tool that allows you to quickly connect to and interact with LLM servers that support the OpenAI v1 API.");

@@ -41,6 +41,13 @@ dotnet run -- --ask "What is the capital of France?"
 
 # Combine with other options
 dotnet run -- --model llama3 --ask "Explain recursion in one sentence"
+
+# Attach files to a prompt (requires --ask)
+dotnet run -- --ask "What's in this photo?" --attach photo.jpg
+dotnet run -- --ask "Compare these" --attach img1.png --attach img2.png
+
+# Disable tool use (for models that don't support it)
+dotnet run -- --ask "Describe this" --attach photo.jpg --no-tools
 ```
 
 ### Quick Question Mode
@@ -56,6 +63,28 @@ ANSWER=$(dotnet run -- --ask "What is 2 + 2?")
 ```
 
 Output goes to plain stdout (no colors or formatting), and errors go to stderr with a non-zero exit code.
+
+### File Attachments
+
+The `--attach` option sends one or more files along with the `--ask` prompt. Repeat the flag for multiple files:
+
+```bash
+# Send an image to a vision-capable model
+dotnet run -- --ask "Describe this image" --attach screenshot.png
+
+# Multiple attachments
+dotnet run -- --ask "What's different between these?" --attach before.jpg --attach after.jpg
+
+# Non-image files are inlined as text
+dotnet run -- --ask "Review this code" --attach src/app.cs
+dotnet run -- --ask "Parse this data" --attach data.csv
+```
+
+**Supported image formats** (sent as binary for vision models): `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, `.bmp`
+
+**Other file types** (`.txt`, `.md`, `.json`, `.xml`, `.csv`, `.html`, `.cs`, etc.) are read as text and included inline with a filename header.
+
+**Note:** Some models (e.g., `gemma3`) support vision but not tool use. Use `--no-tools` to disable the built-in tools when the model reports a tools-related error.
 
 ## Chatting
 
