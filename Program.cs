@@ -44,11 +44,12 @@ coconaApp.AddCommand(async (
     [Option("tps", Description = "Show tokens-per-second stats")] bool? tps,
     [Option("ask", Description = "Ask a single question and exit")] string? ask,
     [Option("attach", Description = "Attach file(s) to the prompt (use with --ask)")] string[]? attach,
-    [Option("no-tools", Description = "Disable tool use (web search, fetch, etc.)")] bool? noTools
+    [Option("no-tools", Description = "Disable tool use (web search, fetch, etc.)")] bool? noTools,
+    [Option("generate-image", Description = "Use the image generation endpoint instead of chat (use with --ask)")] bool? generateImage
 ) =>
 {
     logger.LogInformation("termuddle starting");
-    var cli = new CliOptions(baseUrl, apiKey, model, stream, tps, ask, attach, noTools);
+    var cli = new CliOptions(baseUrl, apiKey, model, stream, tps, ask, attach, noTools, generateImage);
     var prefs = await StartupHelper.ResolveConfigAsync(cli);
 
     if (prefs is null)
@@ -63,6 +64,38 @@ coconaApp.AddCommand(async (
     {
         Console.Error.WriteLine("Error: --attach requires --ask to specify a prompt.");
         return 1;
+    }
+
+    // --- Validate --generate-image requires --ask ---
+    if (cli.GenerateImage == true && cli.Ask is null)
+    {
+        Console.Error.WriteLine("Error: --generate-image requires --ask to specify a prompt.");
+        return 1;
+    }
+
+    // --- Image Generation Mode ---
+    if (cli.GenerateImage == true && cli.Ask is not null)
+    {
+        try
+        {
+            var imageService = new ImageGenerationService(session.BaseUrl);
+            ConsoleHelper.WriteSystem($"Generating image with {session.ModelName}...");
+            var savedPath = await imageService.GenerateImageAsync(
+                cli.Ask, session.ModelName,
+                onProgress: (completed, total) =>
+                {
+                    Console.Write($"\rStep {completed}/{total}");
+                    if (completed >= total) Console.WriteLine();
+                });
+            ConsoleHelper.WriteInfo($"Image saved: {savedPath}");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error during image generation");
+            Console.Error.WriteLine($"Error: {ex.Message}");
+            return 1;
+        }
+        return 0;
     }
 
     // --- Quick Ask Mode ---
@@ -107,6 +140,8 @@ coconaApp.AddCommand(async (
             Console.Error.WriteLine($"Error: {ex.Message}");
             if (cli.NoTools != true && ex.Message.Contains("tool", StringComparison.OrdinalIgnoreCase))
                 Console.Error.WriteLine("Hint: This model may not support tool use. Try adding --no-tools to disable built-in tools.");
+            if (ex.Message.Contains("does not support", StringComparison.OrdinalIgnoreCase))
+                Console.Error.WriteLine("Hint: This model may not support chat completions. If it's an image generation model, try --generate-image instead.");
             return 1;
         }
         return 0;
@@ -249,6 +284,8 @@ coconaApp.AddCommand(async (
             ConsoleHelper.WriteError($"Error: {ex.Message}");
             if (ex.Message.Contains("tool", StringComparison.OrdinalIgnoreCase))
                 ConsoleHelper.WriteError("Hint: This model may not support tool use. Restart with --no-tools to disable built-in tools.");
+            if (ex.Message.Contains("does not support", StringComparison.OrdinalIgnoreCase))
+                ConsoleHelper.WriteError("Hint: This model may not support chat completions. If it's an image generation model, try --generate-image instead.");
         }
     }
 }).WithDescription("A tool that allows you to quickly connect to and interact with LLM servers that support the OpenAI v1 API.");
