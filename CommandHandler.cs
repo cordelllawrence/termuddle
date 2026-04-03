@@ -91,23 +91,25 @@ public static class CommandHandler
 
     private static void HandleHelp()
     {
-        ConsoleHelper.WriteInfo("Available commands:");
-        ConsoleHelper.WriteInfo("  /help                          - Show this help message");
-        ConsoleHelper.WriteInfo("  /info                          - Show session information");
-        ConsoleHelper.WriteInfo("  /clear                         - Clear conversation history");
-        ConsoleHelper.WriteInfo("  /stream                        - Toggle streaming on/off");
-        ConsoleHelper.WriteInfo("  /tps                           - Toggle tokens/sec display on/off");
-        ConsoleHelper.WriteInfo("  /model list                    - List available models");
-        ConsoleHelper.WriteInfo("  /model use <name|N>            - Switch to a model (name, number, or partial match)");
-        ConsoleHelper.WriteInfo("  /config show                   - Show current config");
-        ConsoleHelper.WriteInfo("  /config set <key>=<value>      - Update a config value");
-        ConsoleHelper.WriteInfo("  /config reset                  - Reload config from disk");
-        ConsoleHelper.WriteInfo("  /backup                        - Create a config backup");
-        ConsoleHelper.WriteInfo("  /backup list                   - List config backups");
-        ConsoleHelper.WriteInfo("  /backup load <N>               - Restore Nth backup");
-        ConsoleHelper.WriteInfo("  /backup remove <N>             - Remove Nth backup");
-        ConsoleHelper.WriteInfo("  /bye                           - Exit the application");
-        ConsoleHelper.WriteInfo("    Config keys: base_url, api_key, model, stream, tps");
+        ConsoleHelper.WriteInfoBlock(
+            "Available commands:",
+            "  /help                          - Show this help message",
+            "  /info                          - Show session information",
+            "  /clear                         - Clear conversation history",
+            "  /stream                        - Toggle streaming on/off",
+            "  /tps                           - Toggle tokens/sec display on/off",
+            "  /model list                    - List available models",
+            "  /model use <name|N>            - Switch to a model (name, number, or partial match)",
+            "  /config show                   - Show current config",
+            "  /config set <key>=<value>      - Update a config value",
+            "  /config reset                  - Reload config from disk",
+            "  /backup                        - Create a config backup",
+            "  /backup list                   - List config backups",
+            "  /backup load <N>               - Restore Nth backup",
+            "  /backup remove <N>             - Remove Nth backup",
+            "  /bye                           - Exit the application",
+            "    Config keys: base_url, api_key, model, stream, tps"
+        );
     }
 
     // --- /model ---

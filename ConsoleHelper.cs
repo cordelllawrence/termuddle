@@ -165,6 +165,15 @@ public static class ConsoleHelper
             AnsiConsole.MarkupLine($"[cyan]{Markup.Escape(message)}[/]"));
     }
 
+    public static void WriteInfoBlock(params string[] lines)
+    {
+        TerminalLayout.WriteToOutputArea(() =>
+        {
+            foreach (var line in lines)
+                AnsiConsole.MarkupLine($"[cyan]{Markup.Escape(line)}[/]");
+        });
+    }
+
     public static void WriteStreamChunk(string chunk)
     {
         // During streaming, cursor is already in the output area (via BeginStreamOutput)

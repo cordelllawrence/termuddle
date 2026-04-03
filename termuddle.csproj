@@ -10,10 +10,10 @@
 
   <ItemGroup>
     <PackageReference Include="Cocona" Version="2.2.0" />
-    <PackageReference Include="Microsoft.Extensions.AI" Version="10.3.0" />
-    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.3.0" />
+    <PackageReference Include="Microsoft.Extensions.AI" Version="10.4.1" />
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.4.1" />
     <PackageReference Include="OllamaSharp" Version="5.4.25" />
-    <PackageReference Include="OpenAI" Version="2.8.0" />
+    <PackageReference Include="OpenAI" Version="2.9.1" />
     <PackageReference Include="Serilog.Extensions.Logging" Version="10.0.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
     <PackageReference Include="Spectre.Console" Version="0.54.0" />
