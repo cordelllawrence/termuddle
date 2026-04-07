@@ -23,35 +23,37 @@ If the server is unreachable, termuddle shows an error and exits. If the model i
 
 ### Running with CLI Options
 
+Examples below use `termuddle` for the published binary. When running from source, substitute `dotnet run --` (e.g., `dotnet run -- --ask "hello"`).
+
 ```bash
 # Connect to Ollama with a specific model
-dotnet run -- --base-url http://localhost:11434/v1 --model llama3
+termuddle --base-url http://localhost:11434/v1 --model llama3
 
 # Connect to OpenAI
-dotnet run -- --base-url https://api.openai.com/v1 --api-key sk-... --model gpt-4o
+termuddle --base-url https://api.openai.com/v1 --api-key sk-... --model gpt-4o
 
 # Connect to LM Studio
-dotnet run -- --base-url http://localhost:1234/v1 --model my-model
+termuddle --base-url http://localhost:1234/v1 --model my-model
 
 # Enable streaming and TPS display
-dotnet run -- --base-url http://localhost:11434/v1 --model llama3 --stream --tps
+termuddle --base-url http://localhost:11434/v1 --model llama3 --stream --tps
 
 # Ask a single question and exit (no interactive session)
-dotnet run -- --ask "What is the capital of France?"
+termuddle --ask "What is the capital of France?"
 
 # Combine with other options
-dotnet run -- --model llama3 --ask "Explain recursion in one sentence"
+termuddle --model llama3 --ask "Explain recursion in one sentence"
 
 # Attach files to a prompt (requires --ask)
-dotnet run -- --ask "What's in this photo?" --attach photo.jpg
-dotnet run -- --ask "Compare these" --attach img1.png --attach img2.png
+termuddle --ask "What's in this photo?" --attach photo.jpg
+termuddle --ask "Compare these" --attach img1.png --attach img2.png
 
 # Disable tool use (for models that don't support it)
-dotnet run -- --ask "Describe this" --attach photo.jpg --no-tools
+termuddle --ask "Describe this" --attach photo.jpg --no-tools
 
 # Force a specific API provider (skip auto-detection)
-dotnet run -- --base-url http://localhost:11434/v1 --model llama3 --use-ollama-api
-dotnet run -- --base-url https://api.openai.com/v1 --api-key sk-... --model gpt-4o --use-openai-api
+termuddle --base-url http://localhost:11434/v1 --model llama3 --use-ollama-api
+termuddle --base-url https://api.openai.com/v1 --api-key sk-... --model gpt-4o --use-openai-api
 ```
 
 ### Quick Question Mode
@@ -60,10 +62,10 @@ The `--ask` option sends a single question to the model, prints the response to 
 
 ```bash
 # Use in a pipeline
-dotnet run -- --ask "Summarize this error" < error.log
+termuddle --ask "Summarize this error" < error.log
 
 # Capture output
-ANSWER=$(dotnet run -- --ask "What is 2 + 2?")
+ANSWER=$(termuddle --ask "What is 2 + 2?")
 ```
 
 Output goes to plain stdout (no colors or formatting), and errors go to stderr with a non-zero exit code.
@@ -74,20 +76,20 @@ The `--attach` option sends one or more files along with the `--ask` prompt. Rep
 
 ```bash
 # Send an image to a vision-capable model
-dotnet run -- --ask "Describe this image" --attach screenshot.png
+termuddle --ask "Describe this image" --attach screenshot.png
 
 # Multiple attachments
-dotnet run -- --ask "What's different between these?" --attach before.jpg --attach after.jpg
+termuddle --ask "What's different between these?" --attach before.jpg --attach after.jpg
 
 # Non-image files are inlined as text
-dotnet run -- --ask "Review this code" --attach src/app.cs
-dotnet run -- --ask "Parse this data" --attach data.csv
+termuddle --ask "Review this code" --attach src/app.cs
+termuddle --ask "Parse this data" --attach data.csv
 
 # Vision with Ollama (auto-detected, uses native API for proper image support)
-dotnet run -- --base-url http://localhost:11434/v1 --model gemma4:e2b --ask "Describe this photo" --attach photo.png --no-tools
+termuddle --base-url http://localhost:11434/v1 --model gemma4:e2b --ask "Describe this photo" --attach photo.png --no-tools
 
 # Vision with a LAN-based Ollama server
-dotnet run -- --base-url http://my-server:11434/v1 --model gemma4:e2b --ask "What do you see?" --attach image.jpg --no-tools
+termuddle --base-url http://my-server:11434/v1 --model gemma4:e2b --ask "What do you see?" --attach image.jpg --no-tools
 ```
 
 **Supported image formats** (sent as binary for vision models): `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, `.bmp`
@@ -104,10 +106,10 @@ You can override auto-detection with explicit flags:
 
 ```bash
 # Force Ollama native API (skips detection)
-dotnet run -- --base-url http://localhost:11434/v1 --model gemma4:e2b --use-ollama-api
+termuddle --base-url http://localhost:11434/v1 --model gemma4:e2b --use-ollama-api
 
 # Force OpenAI-compatible API (skips detection)
-dotnet run -- --base-url http://localhost:11434/v1 --model llama3 --use-openai-api
+termuddle --base-url http://localhost:11434/v1 --model llama3 --use-openai-api
 ```
 
 **When to use these flags:**

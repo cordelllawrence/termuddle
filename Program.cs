@@ -1,4 +1,4 @@
-using Cocona;
+using System.CommandLine;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Serilog;
@@ -34,22 +34,46 @@ TaskScheduler.UnobservedTaskException += (_, e) =>
     e.SetObserved();
 };
 
-var coconaBuilder = CoconaApp.CreateBuilder();
-var coconaApp = coconaBuilder.Build();
-coconaApp.AddCommand(async (
-    [Option("base-url", Description = "Base URL for the API provider (e.g. http://localhost:11434/v1)")] string? baseUrl,
-    [Option("api-key", Description = "API key for authentication")] string? apiKey,
-    [Option("model", Description = "Model name to use")] string? model,
-    [Option("stream", Description = "Enable streaming responses")] bool? stream,
-    [Option("tps", Description = "Show tokens-per-second stats")] bool? tps,
-    [Option("ask", Description = "Ask a single question and exit")] string? ask,
-    [Option("attach", Description = "Attach file(s) to the prompt (use with --ask)")] string[]? attach,
-    [Option("no-tools", Description = "Disable tool use (web search, fetch, etc.)")] bool? noTools,
-    [Option("generate-image", Description = "Use the image generation endpoint instead of chat (use with --ask)")] bool? generateImage,
-    [Option("use-ollama-api", Description = "Force using Ollama native API (skip auto-detection)")] bool? useOllamaApi,
-    [Option("use-openai-api", Description = "Force using OpenAI-compatible API (skip auto-detection)")] bool? useOpenAiApi
-) =>
+// --- Define CLI options ---
+var baseUrlOption = new Option<string?>("--base-url") { Description = "Base URL for the API provider (e.g. http://localhost:11434/v1)" };
+var apiKeyOption = new Option<string?>("--api-key") { Description = "API key for authentication" };
+var modelOption = new Option<string?>("--model") { Description = "Model name to use" };
+var streamOption = new Option<bool?>("--stream") { Description = "Enable streaming responses" };
+var tpsOption = new Option<bool?>("--tps") { Description = "Show tokens-per-second stats" };
+var askOption = new Option<string?>("--ask") { Description = "Ask a single question and exit" };
+var attachOption = new Option<string[]?>("--attach") { Description = "Attach file(s) to the prompt (use with --ask)" };
+var noToolsOption = new Option<bool?>("--no-tools") { Description = "Disable tool use (web search, fetch, etc.)" };
+var generateImageOption = new Option<bool?>("--generate-image") { Description = "Use the image generation endpoint instead of chat (use with --ask)" };
+var useOllamaApiOption = new Option<bool?>("--use-ollama-api") { Description = "Force using Ollama native API (skip auto-detection)" };
+var useOpenAiApiOption = new Option<bool?>("--use-openai-api") { Description = "Force using OpenAI-compatible API (skip auto-detection)" };
+
+var rootCommand = new RootCommand("A tool that allows you to quickly connect to and interact with LLM servers that support the OpenAI v1 API.");
+rootCommand.Add(baseUrlOption);
+rootCommand.Add(apiKeyOption);
+rootCommand.Add(modelOption);
+rootCommand.Add(streamOption);
+rootCommand.Add(tpsOption);
+rootCommand.Add(askOption);
+rootCommand.Add(attachOption);
+rootCommand.Add(noToolsOption);
+rootCommand.Add(generateImageOption);
+rootCommand.Add(useOllamaApiOption);
+rootCommand.Add(useOpenAiApiOption);
+
+rootCommand.SetAction(async (parseResult, cancellationToken) =>
 {
+    var baseUrl = parseResult.GetValue(baseUrlOption);
+    var apiKey = parseResult.GetValue(apiKeyOption);
+    var model = parseResult.GetValue(modelOption);
+    var stream = parseResult.GetValue(streamOption);
+    var tps = parseResult.GetValue(tpsOption);
+    var ask = parseResult.GetValue(askOption);
+    var attach = parseResult.GetValue(attachOption);
+    var noTools = parseResult.GetValue(noToolsOption);
+    var generateImage = parseResult.GetValue(generateImageOption);
+    var useOllamaApi = parseResult.GetValue(useOllamaApiOption);
+    var useOpenAiApi = parseResult.GetValue(useOpenAiApiOption);
+
     logger.LogInformation("termuddle starting");
     var cli = new CliOptions(baseUrl, apiKey, model, stream, tps, ask, attach, noTools, generateImage, useOllamaApi, useOpenAiApi);
     var prefs = await StartupHelper.ResolveConfigAsync(cli);
@@ -293,8 +317,10 @@ coconaApp.AddCommand(async (
                 ConsoleHelper.WriteError("Hint: This model may not support chat completions. If it's an image generation model, try --generate-image instead.");
         }
     }
-}).WithDescription("A tool that allows you to quickly connect to and interact with LLM servers that support the OpenAI v1 API.");
-coconaApp.Run();
+});
+
+var parseResult = rootCommand.Parse(args);
+return await parseResult.InvokeAsync();
 
 static int EstimateWordCount(string text)
     => text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
