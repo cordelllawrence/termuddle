@@ -45,18 +45,23 @@ coconaApp.AddCommand(async (
     [Option("ask", Description = "Ask a single question and exit")] string? ask,
     [Option("attach", Description = "Attach file(s) to the prompt (use with --ask)")] string[]? attach,
     [Option("no-tools", Description = "Disable tool use (web search, fetch, etc.)")] bool? noTools,
-    [Option("generate-image", Description = "Use the image generation endpoint instead of chat (use with --ask)")] bool? generateImage
+    [Option("generate-image", Description = "Use the image generation endpoint instead of chat (use with --ask)")] bool? generateImage,
+    [Option("use-ollama-api", Description = "Force using Ollama native API (skip auto-detection)")] bool? useOllamaApi,
+    [Option("use-openai-api", Description = "Force using OpenAI-compatible API (skip auto-detection)")] bool? useOpenAiApi
 ) =>
 {
     logger.LogInformation("termuddle starting");
-    var cli = new CliOptions(baseUrl, apiKey, model, stream, tps, ask, attach, noTools, generateImage);
+    var cli = new CliOptions(baseUrl, apiKey, model, stream, tps, ask, attach, noTools, generateImage, useOllamaApi, useOpenAiApi);
     var prefs = await StartupHelper.ResolveConfigAsync(cli);
 
     if (prefs is null)
         return 1;
 
+    // --- Detect API provider ---
+    var provider = await StartupHelper.ResolveProviderAsync(cli, prefs.BaseUrl);
+
     // --- Build Session ---
-    var session = new ChatSession { Preferences = prefs };
+    var session = new ChatSession { Preferences = prefs, Provider = provider };
     session.Reconnect();
 
     // --- Validate --attach requires --ask ---

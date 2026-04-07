@@ -1,6 +1,8 @@
 namespace termuddle;
 
-public record CliOptions(string? BaseUrl, string? ApiKey, string? Model, bool? Stream, bool? Tps, string? Ask, string[]? Attach, bool? NoTools, bool? GenerateImage);
+public enum ApiProvider { Auto, Ollama, OpenAI }
+
+public record CliOptions(string? BaseUrl, string? ApiKey, string? Model, bool? Stream, bool? Tps, string? Ask, string[]? Attach, bool? NoTools, bool? GenerateImage, bool? UseOllamaApi, bool? UseOpenAiApi);
 
 public static class StartupHelper
 {
@@ -29,6 +31,49 @@ public static class StartupHelper
         }
 
         return await RunSetupWizardAsync();
+    }
+
+    /// <summary>
+    /// Resolves the API provider: explicit CLI flags take priority, otherwise auto-detect.
+    /// </summary>
+    public static async Task<ApiProvider> ResolveProviderAsync(CliOptions cli, string baseUrl)
+    {
+        if (cli.UseOllamaApi == true && cli.UseOpenAiApi == true)
+        {
+            ConsoleHelper.WriteError("Cannot specify both --use-ollama-api and --use-openai-api.");
+            return ApiProvider.Auto;
+        }
+
+        if (cli.UseOllamaApi == true) return ApiProvider.Ollama;
+        if (cli.UseOpenAiApi == true) return ApiProvider.OpenAI;
+
+        return await DetectProviderAsync(baseUrl);
+    }
+
+    /// <summary>
+    /// Auto-detect whether the server is Ollama by checking the root endpoint.
+    /// Ollama responds with "Ollama is running" at its root URL.
+    /// </summary>
+    private static async Task<ApiProvider> DetectProviderAsync(string baseUrl)
+    {
+        try
+        {
+            var origin = new Uri(baseUrl).GetLeftPart(UriPartial.Authority);
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            var response = await http.GetStringAsync(origin);
+            if (response.Contains("Ollama", StringComparison.OrdinalIgnoreCase))
+            {
+                ConsoleHelper.WriteSystem("Detected Ollama server — using native Ollama API.");
+                return ApiProvider.Ollama;
+            }
+        }
+        catch
+        {
+            // Detection failed — fall through to OpenAI
+        }
+
+        ConsoleHelper.WriteSystem("Using OpenAI-compatible API.");
+        return ApiProvider.OpenAI;
     }
 
     /// <summary>

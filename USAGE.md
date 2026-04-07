@@ -48,6 +48,10 @@ dotnet run -- --ask "Compare these" --attach img1.png --attach img2.png
 
 # Disable tool use (for models that don't support it)
 dotnet run -- --ask "Describe this" --attach photo.jpg --no-tools
+
+# Force a specific API provider (skip auto-detection)
+dotnet run -- --base-url http://localhost:11434/v1 --model llama3 --use-ollama-api
+dotnet run -- --base-url https://api.openai.com/v1 --api-key sk-... --model gpt-4o --use-openai-api
 ```
 
 ### Quick Question Mode
@@ -78,6 +82,12 @@ dotnet run -- --ask "What's different between these?" --attach before.jpg --atta
 # Non-image files are inlined as text
 dotnet run -- --ask "Review this code" --attach src/app.cs
 dotnet run -- --ask "Parse this data" --attach data.csv
+
+# Vision with Ollama (auto-detected, uses native API for proper image support)
+dotnet run -- --base-url http://localhost:11434/v1 --model gemma4:e2b --ask "Describe this photo" --attach photo.png --no-tools
+
+# Vision with a LAN-based Ollama server
+dotnet run -- --base-url http://my-server:11434/v1 --model gemma4:e2b --ask "What do you see?" --attach image.jpg --no-tools
 ```
 
 **Supported image formats** (sent as binary for vision models): `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, `.bmp`
@@ -85,6 +95,26 @@ dotnet run -- --ask "Parse this data" --attach data.csv
 **Other file types** (`.txt`, `.md`, `.json`, `.xml`, `.csv`, `.html`, `.cs`, etc.) are read as text and included inline with a filename header.
 
 **Note:** Some models (e.g., `gemma3`) support vision but not tool use. Use `--no-tools` to disable the built-in tools when the model reports a tools-related error.
+
+### API Provider Selection
+
+By default, termuddle auto-detects whether the server is Ollama by checking the server's root endpoint. When Ollama is detected, the native Ollama API is used via [OllamaSharp](https://github.com/awaescher/OllamaSharp) for full feature support (vision, audio, etc.). For all other servers, the OpenAI-compatible API is used via the official OpenAI SDK.
+
+You can override auto-detection with explicit flags:
+
+```bash
+# Force Ollama native API (skips detection)
+dotnet run -- --base-url http://localhost:11434/v1 --model gemma4:e2b --use-ollama-api
+
+# Force OpenAI-compatible API (skips detection)
+dotnet run -- --base-url http://localhost:11434/v1 --model llama3 --use-openai-api
+```
+
+**When to use these flags:**
+
+- `--use-ollama-api` — if auto-detection fails (e.g., behind a reverse proxy) but you know the server is Ollama
+- `--use-openai-api` — if you want to use Ollama's OpenAI compatibility layer instead of the native API
+- If neither flag is specified, termuddle detects the provider automatically
 
 ## Chatting
 

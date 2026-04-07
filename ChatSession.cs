@@ -1,11 +1,13 @@
 using System.IO;
 using Microsoft.Extensions.AI;
+using OllamaSharp;
 using OpenAI;
 
 namespace termuddle;
 
 public class ChatSession
 {
+    public ApiProvider Provider { get; set; } = ApiProvider.Auto;
     public ConfigHelper Preferences { get; set; } = new();
 
     public string BaseUrl
@@ -47,14 +49,20 @@ public class ChatSession
 
     public void Reconnect()
     {
-        var rawClient = CreateChatClient(BaseUrl, ApiKey, ModelName);
+        var rawClient = CreateChatClient(Provider, BaseUrl, ApiKey, ModelName);
         ChatClient = new ChatClientBuilder(rawClient)
             .UseFunctionInvocation()
             .Build();
     }
 
-    public static IChatClient CreateChatClient(string baseUrl, string apiKey, string model)
+    public static IChatClient CreateChatClient(ApiProvider provider, string baseUrl, string apiKey, string model)
     {
+        if (provider == ApiProvider.Ollama)
+        {
+            var origin = new Uri(baseUrl).GetLeftPart(UriPartial.Authority);
+            return new OllamaApiClient(new Uri(origin), model);
+        }
+
         var endpoint = new Uri(baseUrl);
         var credential = new System.ClientModel.ApiKeyCredential(
             string.IsNullOrEmpty(apiKey) ? "no-key" : apiKey);
